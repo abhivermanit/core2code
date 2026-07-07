@@ -185,4 +185,4 @@ This repository ensures those decisions are made before the first line of code i
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](LICENSE).

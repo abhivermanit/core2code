@@ -4,10 +4,14 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import security from 'eslint-plugin-security';
 
 export default tseslint.config(
   // Base recommended rules
   eslint.configs.recommended,
+
+  // Security rules (detect-eval, unsafe-regex, non-literal-fs-filename, etc.)
+  security.configs.recommended,
 
   // TypeScript recommended rules
   ...tseslint.configs.recommended,

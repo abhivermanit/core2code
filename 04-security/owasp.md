@@ -160,13 +160,57 @@ const user = await db.query('SELECT * FROM users WHERE email = $1', [email]);
 - Disable HTTP redirects or validate redirect targets.
 
 ```typescript
-// Validate URL before fetching
-function isAllowedUrl(url: string): boolean {
-  const parsed = new URL(url);
-  const blockedRanges = ['10.', '172.16.', '192.168.', '169.254.', 'localhost', '127.'];
-  return !blockedRanges.some(range => parsed.hostname.startsWith(range));
+// Robust SSRF guard: scheme allowlist + DNS resolution + reserved-range check.
+// Requires a vetted IP library:  npm i ipaddr.js
+import { lookup } from 'node:dns/promises';
+import net from 'node:net';
+import ipaddr from 'ipaddr.js';
+
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
+
+// Allow only public unicast addresses. Everything else (private, loopback,
+// link-local incl. the 169.254.169.254 cloud-metadata IP, unique-local,
+// reserved) is refused.
+function isPublicUnicast(ip: string): boolean {
+  return ipaddr.parse(ip).range() === 'unicast';
+}
+
+export async function assertUrlIsSafe(rawUrl: string): Promise<URL> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+
+  // 1. Scheme allowlist — blocks file:, gopher:, etc.
+  if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
+    throw new Error(`Blocked protocol: ${url.protocol}`);
+  }
+
+  // 2. Resolve the host and check EVERY resolved address. This handles
+  //    decimal/hex/octal IP encodings and hostnames that resolve to internal IPs.
+  const host = url.hostname.replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+  const ips = net.isIP(host)
+    ? [host]
+    : (await lookup(host, { all: true })).map((r) => r.address);
+
+  if (ips.length === 0) throw new Error('Host did not resolve');
+
+  for (const ip of ips) {
+    if (!isPublicUnicast(ip)) throw new Error(`Blocked address: ${ip}`);
+  }
+
+  return url;
 }
 ```
+
+> **Residual risk — DNS rebinding.** The IP can change between this check and the
+> actual request. For high-assurance calls, resolve once here and **pin the
+> connection to the validated IP** (custom `lookup`/agent), or restrict to an
+> **allowlist of exact domains**. Prefer an allowlist wherever the set of target
+> hosts is known — this matches the "use allowlists, not denylists" principle
+> stated above.
 
 ---
 

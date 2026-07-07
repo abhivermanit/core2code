@@ -1,20 +1,22 @@
 # =============================================================================
 # Stage 1: Dependencies
 # =============================================================================
+# TODO(pin): resolve digest with: docker inspect --format='{{index .RepoDigests 0}}' node:20-alpine
+# Then replace node:20-alpine with node:20-alpine@sha256:<digest> on all three FROM lines.
 FROM node:20-alpine AS deps
 
 WORKDIR /app
 
 # Install dependencies only (cache layer)
 COPY package.json package-lock.json ./
-RUN npm ci --only=production && \
+RUN npm ci --omit=dev && \
     cp -R node_modules /prod_modules && \
     npm ci
 
 # =============================================================================
 # Stage 2: Build
 # =============================================================================
-FROM node:20-alpine AS build
+FROM node:20-alpine AS build  # TODO(pin): pin to same digest as deps stage
 
 WORKDIR /app
 
@@ -26,7 +28,7 @@ RUN npm run build
 # =============================================================================
 # Stage 3: Production
 # =============================================================================
-FROM node:20-alpine AS production
+FROM node:20-alpine AS production  # TODO(pin): pin to same digest as deps stage
 
 # Security: non-root user
 RUN addgroup --system --gid 1001 appgroup && \

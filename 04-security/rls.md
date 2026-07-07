@@ -104,27 +104,47 @@ CREATE POLICY posts_write ON posts
 ## Setting Context (Application Side)
 
 ```typescript
-// Before executing queries, set the user context
-async function withUserContext<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+import type { PoolClient } from 'pg';
+
+// Run queries with the user's RLS context, on ONE connection, in ONE transaction.
+// - BEGIN/COMMIT is required: SET LOCAL / set_config(...,true) only live for the
+//   current transaction.
+// - set_config('name', value, true) is the parameter-safe form. `SET LOCAL`
+//   cannot take a bind parameter ($1) — the old version was invalid SQL.
+// - The callback MUST use the passed `client`, not the pool, or the context is lost.
+async function withUserContext<T>(
+  userId: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query("SET LOCAL app.current_user_id = $1", [userId]);
-    return await fn();
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }
 }
 
-// Usage
-const orders = await withUserContext(req.user.id, () => {
-  // This query is automatically filtered by RLS
-  return db.query('SELECT * FROM orders');
-});
+// Usage — the query runs on the SAME client that holds the context.
+const orders = await withUserContext(req.user.id, (client) =>
+  client.query('SELECT * FROM orders'),
+);
 ```
 
 ---
 
 ## Testing Approach
+
+> In tests, use the same `withUserContext(client => ...)` pattern: set the
+> context and run the assertion query on the **same** connection, inside one
+> transaction. Setting context on one pooled connection and querying on another
+> will not exercise RLS.
 
 ### 1. Positive Tests (Can Access Own Data)
 
