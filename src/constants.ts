@@ -1,47 +1,129 @@
-import path from 'node:path';
-import fs from 'fs-extra';
-import { TemplateNotFoundError } from './errors';
+import path from 'path';
+import { StackCategory, StackDefinition } from './types';
 
-export const CLI_NAME = 'create-core2code';
-export const CLI_VERSION = '0.1.0';
-export const CLI_DESCRIPTION =
-  'Scaffold a new project using the Core2Code engineering framework.';
+/**
+ * Root directory of the package (one level above dist/).
+ */
+export const PACKAGE_ROOT = path.resolve(__dirname, '..');
 
-export const PLACEHOLDERS = {
-  PROJECT_NAME: '{{PROJECT_NAME}}',
-  CURRENT_YEAR: '{{CURRENT_YEAR}}',
-  CURRENT_DATE: '{{CURRENT_DATE}}',
-} as const;
+/**
+ * Path to the template directory.
+ */
+export const TEMPLATE_DIR = path.join(PACKAGE_ROOT, 'template');
 
-export const BINARY_EXTENSIONS: ReadonlySet<string> = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.svg',
-  '.pdf', '.zip', '.gz', '.tar', '.7z',
-  '.woff', '.woff2', '.ttf', '.eot', '.otf',
-  '.mp4', '.mov', '.mp3', '.wav',
-]);
+/**
+ * Pattern for validating project names.
+ */
+export const NAME_PATTERN = /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$/;
 
-export const RESERVED_NAMES: ReadonlySet<string> = new Set([
-  '.', '..', 'node_modules', '.git', 'con', 'prn', 'aux', 'nul',
-]);
+/**
+ * Maximum length of a project name.
+ */
+export const MAX_NAME_LENGTH = 214;
 
-export const MAX_PROJECT_NAME_LENGTH = 214;
+/**
+ * All available stack definitions.
+ */
+export const STACKS: StackDefinition[] = [
+  {
+    key: 'react',
+    category: 'frontend',
+    label: 'React',
+    description: 'React SPA with TypeScript and Vite',
+    templateDir: 'frontend',
+  },
+  {
+    key: 'nextjs',
+    category: 'frontend',
+    label: 'Next.js',
+    description: 'Full-stack React with Next.js App Router',
+    templateDir: 'frontend',
+  },
+  {
+    key: 'express',
+    category: 'backend',
+    label: 'Express',
+    description: 'Express.js REST API with TypeScript',
+    templateDir: 'backend',
+  },
+  {
+    key: 'fastify',
+    category: 'backend',
+    label: 'Fastify',
+    description: 'Fastify API with schema validation',
+    templateDir: 'backend',
+  },
+  {
+    key: 'postgres',
+    category: 'database',
+    label: 'PostgreSQL',
+    description: 'PostgreSQL with migrations and connection pooling',
+    templateDir: 'database',
+  },
+  {
+    key: 'mongodb',
+    category: 'database',
+    label: 'MongoDB',
+    description: 'MongoDB with Mongoose ODM',
+    templateDir: 'database',
+  },
+  {
+    key: 'docker',
+    category: 'infra',
+    label: 'Docker',
+    description: 'Dockerfile, docker-compose, and multi-stage builds',
+    templateDir: 'common',
+  },
+  {
+    key: 'github-actions',
+    category: 'infra',
+    label: 'GitHub Actions',
+    description: 'CI/CD pipeline with GitHub Actions',
+    templateDir: 'common',
+  },
+];
 
-export const COPY_EXCLUDE: ReadonlySet<string> = new Set(['.git', 'node_modules']);
+/**
+ * Map from stack key to stack definition for quick lookups.
+ */
+export const STACK_MAP: ReadonlyMap<string, StackDefinition> = new Map(
+  STACKS.map((s) => [s.key, s]),
+);
 
-export const TEMPLATE_OVERVIEW_FILE = 'README.md';
-export const FRAMEWORK_OVERVIEW_FILE = 'CORE2CODE.md';
+/**
+ * All valid stack keys.
+ */
+export const VALID_STACK_KEYS: ReadonlySet<string> = new Set(
+  STACKS.map((s) => s.key),
+);
 
-export const TEMPLATE_GITIGNORE_SOURCE = path.join('10-templates', '.gitignore');
-export const PROJECT_GITIGNORE = '.gitignore';
+/**
+ * Ordered list of categories for prompting.
+ */
+export const CATEGORY_ORDER: StackCategory[] = [
+  'frontend',
+  'backend',
+  'database',
+  'infra',
+];
 
-export function resolveTemplateRoot(fromDir: string = __dirname): string {
-  const candidates = [
-    path.resolve(fromDir, '..', 'template'),
-    path.resolve(fromDir, '..', '..', 'template'),
-  ];
-  const found = candidates.find((candidate) => fs.existsSync(candidate));
-  if (found === undefined) {
-    throw new TemplateNotFoundError(candidates);
+/**
+ * Category display labels.
+ */
+export const CATEGORY_LABELS: Record<StackCategory, string> = {
+  frontend: 'Frontend',
+  backend: 'Backend',
+  database: 'Database',
+  infra: 'Infrastructure',
+};
+
+/**
+ * Retrieve a stack definition by key or throw.
+ */
+export function getStackDefinition(key: string): StackDefinition {
+  const def = STACK_MAP.get(key);
+  if (!def) {
+    throw new Error(`Unknown stack key: ${key}`);
   }
-  return found;
+  return def;
 }

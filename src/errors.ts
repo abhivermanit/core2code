@@ -1,56 +1,70 @@
-export enum ExitCode {
-  Success = 0,
-  GenericError = 1,
-  InvalidInput = 2,
-  TargetExists = 3,
-  TemplateMissing = 4,
-  FileSystemError = 5,
-}
+import { ExitCode } from './types';
 
-export class Core2CodeError extends Error {
+/**
+ * Base error class for the CLI with an associated exit code.
+ */
+export class CliError extends Error {
   public readonly exitCode: ExitCode;
 
-  constructor(message: string, exitCode: ExitCode = ExitCode.GenericError) {
+  constructor(message: string, exitCode: ExitCode = ExitCode.Unknown) {
     super(message);
-    Object.setPrototypeOf(this, new.target.prototype);
-    this.name = new.target.name;
+    this.name = 'CliError';
     this.exitCode = exitCode;
   }
 }
 
-export class InvalidProjectNameError extends Core2CodeError {
-  constructor(projectName: string, reasons: readonly string[]) {
-    const detail = reasons.map((r) => `  - ${r}`).join('\n');
-    super(`Invalid project name "${projectName}":\n${detail}`, ExitCode.InvalidInput);
-  }
-}
-
-export class DirectoryExistsError extends Core2CodeError {
-  constructor(projectPath: string) {
+/**
+ * Thrown when the user provides an invalid project name.
+ */
+export class InvalidProjectNameError extends CliError {
+  constructor(projectName: string, detail: string) {
     super(
-      `Target directory already exists and is not empty:\n  ${projectPath}\n` +
-        `Choose a different name or re-run with --force to overwrite.`,
-      ExitCode.TargetExists,
+      `Invalid project name "${projectName}":\n${detail}`,
+      ExitCode.InvalidInput,
     );
+    this.name = 'InvalidProjectNameError';
   }
 }
 
-export class TemplateNotFoundError extends Core2CodeError {
-  constructor(searchedPaths: readonly string[]) {
-    const detail = searchedPaths.map((p) => `  - ${p}`).join('\n');
-    super(
-      `Could not locate the bundled Core2Code template. Searched:\n${detail}\n` +
-        `This usually means the package was installed incompletely.`,
-      ExitCode.TemplateMissing,
-    );
-  }
-}
-
-export class FileSystemError extends Core2CodeError {
-  constructor(message: string, cause?: unknown) {
+/**
+ * Thrown when a filesystem operation fails.
+ */
+export class FileSystemError extends CliError {
+  constructor(message: string) {
     super(message, ExitCode.FileSystemError);
-    if (cause !== undefined) {
-      this.cause = cause;
-    }
+    this.name = 'FileSystemError';
+  }
+}
+
+/**
+ * Thrown when a git operation fails.
+ */
+export class GitError extends CliError {
+  constructor(message: string) {
+    super(message, ExitCode.GitError);
+    this.name = 'GitError';
+  }
+}
+
+/**
+ * Thrown when the user aborts the operation.
+ */
+export class AbortedError extends CliError {
+  constructor(message = 'Operation aborted by user.') {
+    super(message, ExitCode.Aborted);
+    this.name = 'AbortedError';
+  }
+}
+
+/**
+ * Thrown when one or more requested stacks are invalid.
+ */
+export class InvalidStackError extends CliError {
+  constructor(invalidStacks: string[]) {
+    super(
+      `Unknown stack(s): ${invalidStacks.join(', ')}`,
+      ExitCode.InvalidInput,
+    );
+    this.name = 'InvalidStackError';
   }
 }

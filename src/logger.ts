@@ -1,52 +1,64 @@
-import ora from 'ora';
+import ora, { Ora } from 'ora';
 import pc from 'picocolors';
-import type { Logger } from './types';
+import { Logger } from './types';
 
+/**
+ * Console logger with ora spinner support.
+ */
 export class ConsoleLogger implements Logger {
-  public info(message: string): void {
-    console.log(`${pc.cyan('ℹ')} ${message}`);
+  private spinner: Ora | null = null;
+
+  info(message: string): void {
+    console.log(`${pc.blue('ℹ')} ${message}`);
   }
 
-  public success(message: string): void {
+  success(message: string): void {
     console.log(`${pc.green('✔')} ${message}`);
   }
 
-  public warn(message: string): void {
-    console.warn(`${pc.yellow('⚠')} ${message}`);
+  warn(message: string): void {
+    console.log(`${pc.yellow('⚠')} ${message}`);
   }
 
-  public error(message: string): void {
-    console.error(`${pc.red('✖')} ${message}`);
+  error(message: string): void {
+    console.log(`${pc.red('✖')} ${message}`);
   }
 
-  public plain(message: string): void {
+  plain(message: string): void {
     console.log(message);
   }
 
-  public async step<T>(label: string, task: () => Promise<T>): Promise<T> {
-    const spinner = ora({ text: label }).start();
-    try {
-      const result = await task();
-      spinner.succeed(label);
-      return result;
-    } catch (error) {
-      spinner.fail(label);
-      throw error;
+  startSpinner(message: string): void {
+    this.spinner = ora(message).start();
+  }
+
+  stopSpinner(success = true, message?: string): void {
+    if (!this.spinner) return;
+    if (success) {
+      this.spinner.succeed(message);
+    } else {
+      this.spinner.fail(message);
     }
+    this.spinner = null;
   }
 }
 
+/**
+ * Silent logger that produces no output. Useful for testing and programmatic usage.
+ */
 export class SilentLogger implements Logger {
-  public info(): void { /* intentionally silent */ }
-  public success(): void { /* intentionally silent */ }
-  public warn(): void { /* intentionally silent */ }
-  public error(): void { /* intentionally silent */ }
-  public plain(): void { /* intentionally silent */ }
-  public async step<T>(_label: string, task: () => Promise<T>): Promise<T> {
-    return task();
-  }
+  info(_message: string): void {}
+  success(_message: string): void {}
+  warn(_message: string): void {}
+  error(_message: string): void {}
+  plain(_message: string): void {}
+  startSpinner(_message: string): void {}
+  stopSpinner(_success?: boolean, _message?: string): void {}
 }
 
+/**
+ * Create a silent logger instance.
+ */
 export function createSilentLogger(): Logger {
   return new SilentLogger();
 }

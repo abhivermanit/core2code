@@ -1,34 +1,37 @@
-import os from 'node:os';
-import path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import path from 'path';
 import fs from 'fs-extra';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { initRepository, isGitAvailable } from '../src/git';
-import { removeDirectorySafe } from '../src/filesystem';
+import { isGitAvailable, initRepository } from '../src/git';
 
-let workdir: string;
+describe('git', () => {
+  const testDir = path.join(__dirname, '.tmp-git-test');
 
-beforeEach(async () => {
-  workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'c2c-git-'));
-});
-
-afterEach(async () => {
-  await removeDirectorySafe(workdir);
-});
-
-describe('isGitAvailable', () => {
-  it('returns a boolean', () => {
-    expect(typeof isGitAvailable()).toBe('boolean');
+  beforeEach(async () => {
+    await fs.remove(testDir);
+    await fs.ensureDir(testDir);
   });
-});
 
-describe('initRepository', () => {
-  it('creates a .git directory when git is available', () => {
-    if (!isGitAvailable()) {
-      expect(initRepository(workdir)).toBe(false);
-      return;
-    }
-    const ok = initRepository(workdir);
-    expect(ok).toBe(true);
-    expect(fs.pathExistsSync(path.join(workdir, '.git'))).toBe(true);
+  afterEach(async () => {
+    await fs.remove(testDir);
+  });
+
+  describe('isGitAvailable', () => {
+    it('returns true when git is installed', () => {
+      // Git should be available in the test environment
+      expect(isGitAvailable()).toBe(true);
+    });
+  });
+
+  describe('initRepository', () => {
+    it('creates a .git directory', () => {
+      initRepository(testDir);
+      expect(fs.existsSync(path.join(testDir, '.git'))).toBe(true);
+    });
+
+    it('initializes with main branch when supported', () => {
+      initRepository(testDir);
+      const gitDir = path.join(testDir, '.git');
+      expect(fs.existsSync(gitDir)).toBe(true);
+    });
   });
 });

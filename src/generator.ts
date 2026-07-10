@@ -1,114 +1,100 @@
-import path from 'node:path';
-import {
-  FRAMEWORK_OVERVIEW_FILE,
-  PROJECT_GITIGNORE,
-  TEMPLATE_GITIGNORE_SOURCE,
-  TEMPLATE_OVERVIEW_FILE,
-  resolveTemplateRoot,
-} from './constants';
-import { DirectoryExistsError } from './errors';
-import {
-  copyDirectory,
-  ensureDirectory,
-  isDirectoryEmpty,
-  moveFile,
-  pathExists,
-  removeDirectorySafe,
-  writeFile,
-} from './filesystem';
-import { initRepository, isGitAvailable } from './git';
-import {
-  applyContextToTree,
-  createTemplateContext,
-  renderProjectReadme,
-} from './template';
-import { assertValidProjectName } from './validation';
-import type { ScaffoldOptions, ScaffoldResult, TemplateContext } from './types';
+import path from 'path';
+import { GeneratorOptions, GeneratorResult } from './types';
+import { resolveStacks } from './registry';
+import { copyCommonTemplate, copyStackTemplate, applyTemplateVariables, getTemplateVariables } from './template';
+import { ensureDirectory, isDirectoryEmpty, removeDirectorySafe, pathExists } from './filesystem';
+import { isGitAvailable, initRepository } from './git';
+import { FileSystemError } from './errors';
 
-export async function scaffoldProject(options: ScaffoldOptions): Promise<ScaffoldResult> {
-  const { projectName, cwd, overwrite, initGit, logger } = options;
+/**
+ * Generate a new project based on the given configuration.
+ */
+export async function generateProject(options: GeneratorOptions): Promise<GeneratorResult> {
+  const { config, logger } = options;
+  const { projectName, stacks, outputDir, initGit, force } = config;
 
-  assertValidProjectName(projectName);
-
-  const projectPath = path.resolve(cwd, projectName);
-  const templateRoot = resolveTemplateRoot();
-  const context = createTemplateContext(projectName);
-
-  if (!overwrite && !(await isDirectoryEmpty(projectPath))) {
-    throw new DirectoryExistsError(projectPath);
-  }
-
-  const { created } = await ensureDirectory(projectPath, overwrite);
-
-  try {
-    await logger.step('Copying Core2Code template', async () => {
-      await copyDirectory(templateRoot, projectPath);
-      await adjustCopiedTree(projectPath, templateRoot);
-    });
-
-    const filesProcessed = await logger.step('Applying project details', async () => {
-      const modified = await applyContextToTree(projectPath, context);
-      await writeGeneratedReadme(projectPath, context);
-      return modified;
-    });
-
-    const gitInitialized = await maybeInitGit(projectPath, initGit, logger);
-
-    return {
-      projectName,
-      projectPath,
-      filesProcessed,
-      gitInitialized,
-    };
-  } catch (error) {
-    if (created) {
-      await removeDirectorySafe(projectPath);
-      logger.warn(`Cleaned up partially created directory: ${projectPath}`);
-    }
-    throw error;
-  }
-}
-
-async function adjustCopiedTree(projectPath: string, templateRoot: string): Promise<void> {
-  const copiedOverview = path.join(projectPath, TEMPLATE_OVERVIEW_FILE);
-  if (await pathExists(copiedOverview)) {
-    await moveFile(copiedOverview, path.join(projectPath, FRAMEWORK_OVERVIEW_FILE));
-  }
-
-  const rootGitignore = path.join(projectPath, PROJECT_GITIGNORE);
-  if (!(await pathExists(rootGitignore))) {
-    const templateGitignore = path.join(templateRoot, TEMPLATE_GITIGNORE_SOURCE);
-    if (await pathExists(templateGitignore)) {
-      await copyDirectory(templateGitignore, rootGitignore);
+  // Check if output directory already exists
+  const exists = await pathExists(outputDir);
+  if (exists) {
+    if (force) {
+      logger.warn(`Removing existing directory: ${outputDir}`);
+      await removeDirectorySafe(outputDir);
+    } else {
+      const empty = await isDirectoryEmpty(outputDir);
+      if (!empty) {
+        throw new FileSystemError(
+          `Directory "${outputDir}" already exists and is not empty. Use --force to overwrite.`,
+        );
+      }
     }
   }
-}
 
-async function writeGeneratedReadme(
-  projectPath: string,
-  context: TemplateContext,
-): Promise<void> {
-  const readme = renderProjectReadme(context);
-  await writeFile(path.join(projectPath, TEMPLATE_OVERVIEW_FILE), readme);
-}
+  // Create output directory
+  await ensureDirectory(outputDir);
 
-async function maybeInitGit(
-  projectPath: string,
-  initGit: boolean,
-  logger: ScaffoldOptions['logger'],
-): Promise<boolean> {
-  if (!initGit) {
-    return false;
+  // Copy common template
+  logger.startSpinner('Copying project template...');
+  await copyCommonTemplate(outputDir);
+
+  // Resolve and copy stack templates
+  const stackDefs = resolveStacks(stacks);
+  for (const stack of stackDefs) {
+    await copyStackTemplate(stack, outputDir);
   }
-  if (!isGitAvailable()) {
-    logger.warn('git not found on PATH — skipping repository initialization.');
-    return false;
+  logger.stopSpinner(true, 'Template files copied');
+
+  // Post-copy normalization:
+  // 1. Rename framework README to CORE2CODE.md (project gets its own README)
+  // 2. Rename _gitignore to .gitignore (npm strips .gitignore from tarballs)
+  const fs = await import('fs-extra');
+  const readmePath = path.join(outputDir, 'README.md');
+  const core2codePath = path.join(outputDir, 'CORE2CODE.md');
+  if (await pathExists(readmePath)) {
+    await fs.default.move(readmePath, core2codePath, { overwrite: true });
   }
-  return logger.step('Initializing git repository', async () => {
-    const ok = initRepository(projectPath);
-    if (!ok) {
-      logger.warn('git init failed — continuing without a repository.');
+  const gitignoreTemplate = path.join(outputDir, '_gitignore');
+  const gitignoreDest = path.join(outputDir, '.gitignore');
+  if (await pathExists(gitignoreTemplate)) {
+    await fs.default.move(gitignoreTemplate, gitignoreDest, { overwrite: true });
+  }
+
+  // Apply template variables
+  logger.startSpinner('Applying template variables...');
+  const variables = getTemplateVariables(projectName, stacks);
+  await applyTemplateVariables(outputDir, variables);
+
+  // Generate project README
+  const readmeContent = `# ${projectName}\n\n> Bootstrapped with the **Core2Code** engineering framework.\n\n## Getting Started\n\nSee \`PROJECT_BOOTSTRAP.md\` for the complete setup checklist.\n\n---\n\nGenerated on ${new Date().toISOString().slice(0, 10)}\n`;
+  await fs.default.writeFile(path.join(outputDir, 'README.md'), readmeContent, 'utf8');
+
+  // Generate STACK.md
+  if (stacks.length > 0) {
+    const stackRows = stackDefs.map(s => `| ${s.label} | ${s.category} | ${s.description} |`).join('\n');
+    const stackMd = `# Stack\n\nSelected technology stack for **${projectName}**.\n\n| Technology | Category | Description |\n| --- | --- | --- |\n${stackRows}\n`;
+    await fs.default.writeFile(path.join(outputDir, 'STACK.md'), stackMd, 'utf8');
+  }
+
+  logger.stopSpinner(true, 'Template variables applied');
+
+  // Initialize git repository
+  if (initGit) {
+    if (isGitAvailable()) {
+      logger.startSpinner('Initializing git repository...');
+      initRepository(outputDir);
+      logger.stopSpinner(true, 'Git repository initialized');
+    } else {
+      logger.warn('Git is not available. Skipping repository initialization.');
     }
-    return ok;
-  });
+  }
+
+  // Summary
+  logger.success(`Created ${projectName} at ${outputDir}`);
+  if (stacks.length > 0) {
+    logger.plain(`  Stacks: ${stacks.join(', ')}`);
+  }
+
+  return {
+    projectPath: outputDir,
+    stacks,
+  };
 }
