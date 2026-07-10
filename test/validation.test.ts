@@ -1,62 +1,79 @@
-import { describe, expect, it } from 'vitest';
-import { assertValidProjectName, validateProjectName } from '../src/validation';
+import { describe, it, expect } from 'vitest';
+import { validateProjectName, assertValidProjectName } from '../src/validation';
 import { InvalidProjectNameError } from '../src/errors';
 
-describe('validateProjectName', () => {
-  it.each([
-    'nutrition-app',
-    'my_app',
-    'app123',
-    'a',
-    'Project.Name',
-    'x'.repeat(214),
-  ])('accepts a valid name: %s', (name) => {
-    expect(validateProjectName(name).valid).toBe(true);
+describe('validation', () => {
+  describe('validateProjectName', () => {
+    it('accepts valid lowercase names', () => {
+      expect(validateProjectName('my-app').valid).toBe(true);
+      expect(validateProjectName('app').valid).toBe(true);
+      expect(validateProjectName('my-cool-app').valid).toBe(true);
+      expect(validateProjectName('app123').valid).toBe(true);
+    });
+
+    it('accepts names with underscores', () => {
+      expect(validateProjectName('my_app').valid).toBe(true);
+      expect(validateProjectName('my_cool_app').valid).toBe(true);
+    });
+
+    it('accepts names with hyphens and numbers', () => {
+      expect(validateProjectName('app-v2').valid).toBe(true);
+      expect(validateProjectName('my-app-2024').valid).toBe(true);
+    });
+
+    it('rejects empty names', () => {
+      const result = validateProjectName('');
+      expect(result.valid).toBe(false);
+      expect(result.errors).toHaveLength(1);
+    });
+
+    it('rejects whitespace-only names', () => {
+      const result = validateProjectName('   ');
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects names starting with a number', () => {
+      const result = validateProjectName('123app');
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects names with uppercase letters', () => {
+      const result = validateProjectName('MyApp');
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects names with special characters', () => {
+      expect(validateProjectName('my@app').valid).toBe(false);
+      expect(validateProjectName('my app').valid).toBe(false);
+      expect(validateProjectName('my.app').valid).toBe(false);
+    });
+
+    it('rejects names starting with a hyphen', () => {
+      expect(validateProjectName('-my-app').valid).toBe(false);
+    });
+
+    it('rejects names starting with an underscore', () => {
+      expect(validateProjectName('_my-app').valid).toBe(false);
+    });
+
+    it('rejects names exceeding max length', () => {
+      const longName = 'a' + 'b'.repeat(214);
+      const result = validateProjectName(longName);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('214');
+    });
   });
 
-  it('rejects an empty name', () => {
-    const result = validateProjectName('   ');
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain('name must not be empty');
-  });
+  describe('assertValidProjectName', () => {
+    it('does not throw for valid names', () => {
+      expect(() => assertValidProjectName('my-app')).not.toThrow();
+      expect(() => assertValidProjectName('cool-project')).not.toThrow();
+    });
 
-  it('rejects names with spaces or illegal characters', () => {
-    expect(validateProjectName('my app').valid).toBe(false);
-    expect(validateProjectName('app!').valid).toBe(false);
-    expect(validateProjectName('a/b').valid).toBe(false);
-  });
-
-  it('rejects names not starting with a letter or digit', () => {
-    expect(validateProjectName('-app').valid).toBe(false);
-    expect(validateProjectName('.app').valid).toBe(false);
-    expect(validateProjectName('_app').valid).toBe(false);
-  });
-
-  it('rejects names ending with a dot', () => {
-    expect(validateProjectName('app.').valid).toBe(false);
-  });
-
-  it('rejects names over the length limit', () => {
-    expect(validateProjectName('x'.repeat(215)).valid).toBe(false);
-  });
-
-  it('rejects reserved names case-insensitively', () => {
-    expect(validateProjectName('node_modules').valid).toBe(false);
-    expect(validateProjectName('CON').valid).toBe(false);
-  });
-
-  it('reports multiple problems at once', () => {
-    const result = validateProjectName('_bad name.');
-    expect(result.errors.length).toBeGreaterThan(1);
-  });
-});
-
-describe('assertValidProjectName', () => {
-  it('does not throw for a valid name', () => {
-    expect(() => assertValidProjectName('good-name')).not.toThrow();
-  });
-
-  it('throws InvalidProjectNameError for a bad name', () => {
-    expect(() => assertValidProjectName('bad name')).toThrow(InvalidProjectNameError);
+    it('throws InvalidProjectNameError for invalid names', () => {
+      expect(() => assertValidProjectName('')).toThrow(InvalidProjectNameError);
+      expect(() => assertValidProjectName('INVALID')).toThrow(InvalidProjectNameError);
+      expect(() => assertValidProjectName('123')).toThrow(InvalidProjectNameError);
+    });
   });
 });

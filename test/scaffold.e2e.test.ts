@@ -1,109 +1,108 @@
-import os from 'node:os';
-import path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import path from 'path';
 import fs from 'fs-extra';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { scaffoldProject } from '../src/generator';
+import { generateProject } from '../src/generator';
+import { buildProjectConfig } from '../src/config';
 import { createSilentLogger } from '../src/logger';
-import { removeDirectorySafe } from '../src/filesystem';
-import { DirectoryExistsError, InvalidProjectNameError } from '../src/errors';
-import { isGitAvailable } from '../src/git';
 
-let cwd: string;
-const logger = createSilentLogger();
+describe('scaffold e2e', () => {
+  const testDir = path.join(__dirname, '.tmp-scaffold-test');
+  const logger = createSilentLogger();
 
-beforeEach(async () => {
-  cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'c2c-e2e-'));
-});
-
-afterEach(async () => {
-  await removeDirectorySafe(cwd);
-});
-
-describe('scaffoldProject (end-to-end)', () => {
-  it('creates a fully populated project', async () => {
-    const result = await scaffoldProject({
-      projectName: 'nutrition-app',
-      cwd,
-      overwrite: false,
-      initGit: true,
-      logger,
-    });
-
-    const root = result.projectPath;
-    expect(result.projectName).toBe('nutrition-app');
-    expect(result.filesProcessed).toBeGreaterThanOrEqual(0);
-
-    expect(await fs.pathExists(path.join(root, '00-foundation'))).toBe(true);
-    expect(await fs.pathExists(path.join(root, '09-checklists', 'production-hardening.md'))).toBe(true);
-    expect(await fs.pathExists(path.join(root, 'PROJECT_BOOTSTRAP.md'))).toBe(true);
-    expect(await fs.pathExists(path.join(root, 'CLAUDE.md'))).toBe(true);
-
-    expect(await fs.pathExists(path.join(root, 'CORE2CODE.md'))).toBe(true);
-    const readme = await fs.readFile(path.join(root, 'README.md'), 'utf8');
-    expect(readme).toContain('# nutrition-app');
-    expect(readme).not.toContain('{{PROJECT_NAME}}');
-
-    expect(await fs.pathExists(path.join(root, '.gitignore'))).toBe(true);
-
-    if (isGitAvailable()) {
-      expect(result.gitInitialized).toBe(true);
-      expect(await fs.pathExists(path.join(root, '.git'))).toBe(true);
-    }
+  beforeEach(async () => {
+    await fs.remove(testDir);
+    await fs.ensureDir(testDir);
   });
 
-  it('skips git when initGit is false', async () => {
-    const result = await scaffoldProject({
-      projectName: 'no-git-app',
-      cwd,
-      overwrite: false,
+  afterEach(async () => {
+    await fs.remove(testDir);
+  });
+
+  it('scaffolds a project with no stacks', async () => {
+    const config = buildProjectConfig({
+      projectName: 'test-project',
+      stacks: [],
+      outputDir: testDir,
       initGit: false,
-      logger,
     });
-    expect(result.gitInitialized).toBe(false);
+
+    const result = await generateProject({ config, logger });
+    expect(result.projectPath).toBe(path.join(testDir, 'test-project'));
+    expect(result.stacks).toEqual([]);
+    expect(await fs.pathExists(result.projectPath)).toBe(true);
+  });
+
+  it('scaffolds a project with stacks', async () => {
+    const config = buildProjectConfig({
+      projectName: 'my-app',
+      stacks: ['react', 'express'],
+      outputDir: testDir,
+      initGit: false,
+    });
+
+    const result = await generateProject({ config, logger });
+    expect(result.stacks).toEqual(['react', 'express']);
+    expect(await fs.pathExists(result.projectPath)).toBe(true);
+  });
+
+  it('initializes git repository when initGit is true', async () => {
+    const config = buildProjectConfig({
+      projectName: 'git-project',
+      stacks: [],
+      outputDir: testDir,
+      initGit: true,
+    });
+
+    const result = await generateProject({ config, logger });
+    expect(await fs.pathExists(path.join(result.projectPath, '.git'))).toBe(true);
+  });
+
+  it('does not create .git when initGit is false', async () => {
+    const config = buildProjectConfig({
+      projectName: 'no-git',
+      stacks: [],
+      outputDir: testDir,
+      initGit: false,
+    });
+
+    const result = await generateProject({ config, logger });
     expect(await fs.pathExists(path.join(result.projectPath, '.git'))).toBe(false);
   });
 
-  it('rejects an invalid project name before touching disk', async () => {
-    await expect(
-      scaffoldProject({
-        projectName: 'bad name',
-        cwd,
-        overwrite: false,
-        initGit: false,
-        logger,
-      }),
-    ).rejects.toBeInstanceOf(InvalidProjectNameError);
-    expect(await fs.pathExists(path.join(cwd, 'bad name'))).toBe(false);
-  });
+  it('overwrites existing directory when force is true', async () => {
+    const projectDir = path.join(testDir, 'force-project');
+    await fs.ensureDir(projectDir);
+    await fs.writeFile(path.join(projectDir, 'existing.txt'), 'old');
 
-  it('refuses to overwrite a non-empty directory without --force', async () => {
-    const target = path.join(cwd, 'existing');
-    await fs.ensureDir(target);
-    await fs.writeFile(path.join(target, 'keep.txt'), 'do not delete');
-    await expect(
-      scaffoldProject({
-        projectName: 'existing',
-        cwd,
-        overwrite: false,
-        initGit: false,
-        logger,
-      }),
-    ).rejects.toBeInstanceOf(DirectoryExistsError);
-    expect(await fs.readFile(path.join(target, 'keep.txt'), 'utf8')).toBe('do not delete');
-  });
-
-  it('overwrites a non-empty directory when overwrite=true', async () => {
-    const target = path.join(cwd, 'reused');
-    await fs.ensureDir(target);
-    await fs.writeFile(path.join(target, 'stale.txt'), 'old');
-    const result = await scaffoldProject({
-      projectName: 'reused',
-      cwd,
-      overwrite: true,
+    const config = buildProjectConfig({
+      projectName: 'force-project',
+      stacks: [],
+      outputDir: testDir,
       initGit: false,
-      logger,
+      force: true,
     });
-    expect(await fs.pathExists(path.join(result.projectPath, 'stale.txt'))).toBe(false);
-    expect(await fs.pathExists(path.join(result.projectPath, 'PROJECT_BOOTSTRAP.md'))).toBe(true);
+
+    const result = await generateProject({ config, logger });
+    expect(await fs.pathExists(result.projectPath)).toBe(true);
+    // Old file should be gone since directory was removed
+    expect(await fs.pathExists(path.join(projectDir, 'existing.txt'))).toBe(false);
+  });
+
+  it('throws when directory exists and is not empty without force', async () => {
+    const projectDir = path.join(testDir, 'exists-project');
+    await fs.ensureDir(projectDir);
+    await fs.writeFile(path.join(projectDir, 'existing.txt'), 'content');
+
+    const config = buildProjectConfig({
+      projectName: 'exists-project',
+      stacks: [],
+      outputDir: testDir,
+      initGit: false,
+      force: false,
+    });
+
+    await expect(generateProject({ config, logger })).rejects.toThrow(
+      /already exists and is not empty/,
+    );
   });
 });

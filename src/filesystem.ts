@@ -1,166 +1,112 @@
-import path from 'node:path';
 import fs from 'fs-extra';
-import { BINARY_EXTENSIONS, COPY_EXCLUDE } from './constants';
-import { FileSystemError } from './errors';
+import path from 'path';
 
-export interface EnsureDirectoryResult {
-  readonly created: boolean;
+/**
+ * Ensure a directory exists, creating it recursively if necessary.
+ */
+export async function ensureDirectory(dirPath: string): Promise<void> {
+  await fs.ensureDir(dirPath);
 }
 
-function describeError(error: unknown, fallback: string): string {
-  if (error instanceof Error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EACCES' || code === 'EPERM') {
-      return `Permission denied: ${fallback}`;
-    }
-    if (code === 'ENOSPC') {
-      return `No space left on device: ${fallback}`;
-    }
-    return `${fallback} (${error.message})`;
+/**
+ * Check if a directory is empty (or doesn't exist).
+ */
+export async function isDirectoryEmpty(dirPath: string): Promise<boolean> {
+  if (!(await fs.pathExists(dirPath))) {
+    return true;
   }
-  return fallback;
+  const entries = await fs.readdir(dirPath);
+  return entries.length === 0;
 }
 
-export async function pathExists(target: string): Promise<boolean> {
-  return fs.pathExists(target);
+/**
+ * Recursively copy a directory from source to destination.
+ */
+export async function copyDirectory(src: string, dest: string): Promise<void> {
+  await fs.copy(src, dest, { overwrite: true });
 }
 
-export async function ensureDirectory(
-  directory: string,
-  overwrite: boolean,
-): Promise<EnsureDirectoryResult> {
-  try {
-    const exists = await fs.pathExists(directory);
-    if (!exists) {
-      await fs.ensureDir(directory);
-      return { created: true };
-    }
-    if (overwrite) {
-      await fs.emptyDir(directory);
-    }
-    return { created: false };
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not prepare directory ${directory}`),
-      error,
-    );
-  }
-}
+/**
+ * Recursively list all files in a directory, returning relative paths.
+ */
+export async function listFilesRecursively(dirPath: string): Promise<string[]> {
+  const results: string[] = [];
 
-export async function isDirectoryEmpty(directory: string): Promise<boolean> {
-  try {
-    const exists = await fs.pathExists(directory);
-    if (!exists) {
-      return true;
-    }
-    const entries = await fs.readdir(directory);
-    return entries.length === 0;
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not read directory ${directory}`),
-      error,
-    );
-  }
-}
-
-export async function copyDirectory(source: string, destination: string): Promise<void> {
-  try {
-    await fs.copy(source, destination, {
-      overwrite: true,
-      errorOnExist: false,
-      filter: (src: string) => !COPY_EXCLUDE.has(path.basename(src)),
-    });
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not copy template into ${destination}`),
-      error,
-    );
-  }
-}
-
-export async function listFilesRecursively(root: string): Promise<string[]> {
-  const files: string[] = [];
-  async function walk(current: string): Promise<void> {
-    const entries = await fs.readdir(current, { withFileTypes: true });
+  async function walk(currentDir: string): Promise<void> {
+    const entries = await fs.readdir(currentDir, { withFileTypes: true });
     for (const entry of entries) {
-      const full = path.join(current, entry.name);
+      const fullPath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
-        await walk(full);
-      } else if (entry.isFile()) {
-        files.push(full);
+        await walk(fullPath);
+      } else {
+        results.push(path.relative(dirPath, fullPath));
       }
     }
   }
-  try {
-    await walk(root);
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not enumerate files under ${root}`),
-      error,
-    );
+
+  if (await fs.pathExists(dirPath)) {
+    await walk(dirPath);
   }
-  return files;
+
+  return results;
 }
 
+/**
+ * Binary file extensions that should not be processed as text.
+ */
+const BINARY_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp',
+  '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  '.zip', '.tar', '.gz', '.bz2',
+  '.pdf', '.exe', '.dll', '.so', '.dylib',
+]);
+
+/**
+ * Check if a file is likely binary based on its extension.
+ */
 export function isBinaryFile(filePath: string): boolean {
-  return BINARY_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+  const ext = path.extname(filePath).toLowerCase();
+  return BINARY_EXTENSIONS.has(ext);
 }
 
+/**
+ * Replace occurrences of a pattern in a file.
+ */
 export async function replaceInFile(
   filePath: string,
-  replacements: ReadonlyMap<string, string>,
-): Promise<boolean> {
-  if (isBinaryFile(filePath)) {
-    return false;
-  }
-  try {
-    const original = await fs.readFile(filePath, 'utf8');
-    let updated = original;
-    for (const [token, value] of replacements) {
-      if (updated.includes(token)) {
-        updated = updated.split(token).join(value);
-      }
-    }
-    if (updated !== original) {
-      await fs.writeFile(filePath, updated, 'utf8');
-      return true;
-    }
-    return false;
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not process file ${filePath}`),
-      error,
-    );
-  }
+  searchValue: string | RegExp,
+  replaceValue: string,
+): Promise<void> {
+  const content = await fs.readFile(filePath, 'utf-8');
+  const updated = content.replace(searchValue, replaceValue);
+  await fs.writeFile(filePath, updated, 'utf-8');
 }
 
+/**
+ * Write content to a file, creating parent directories if needed.
+ */
 export async function writeFile(filePath: string, content: string): Promise<void> {
-  try {
-    await fs.ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, content, 'utf8');
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not write file ${filePath}`),
-      error,
-    );
-  }
+  await fs.ensureDir(path.dirname(filePath));
+  await fs.writeFile(filePath, content, 'utf-8');
 }
 
-export async function moveFile(from: string, to: string): Promise<void> {
-  try {
-    await fs.move(from, to, { overwrite: true });
-  } catch (error) {
-    throw new FileSystemError(
-      describeError(error, `could not move ${from} to ${to}`),
-      error,
-    );
-  }
+/**
+ * Move (rename) a file or directory.
+ */
+export async function moveFile(src: string, dest: string): Promise<void> {
+  await fs.move(src, dest, { overwrite: true });
 }
 
-export async function removeDirectorySafe(directory: string): Promise<void> {
-  try {
-    await fs.remove(directory);
-  } catch {
-    /* best effort: ignore */
-  }
+/**
+ * Safely remove a directory and its contents.
+ */
+export async function removeDirectorySafe(dirPath: string): Promise<void> {
+  await fs.remove(dirPath);
+}
+
+/**
+ * Check if a path exists.
+ */
+export async function pathExists(targetPath: string): Promise<boolean> {
+  return fs.pathExists(targetPath);
 }

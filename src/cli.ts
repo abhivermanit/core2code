@@ -1,105 +1,103 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import pc from 'picocolors';
-import {
-  CLI_DESCRIPTION,
-  CLI_NAME,
-  CLI_VERSION,
-} from './constants';
-import { Core2CodeError, ExitCode } from './errors';
-import { scaffoldProject } from './generator';
+import { CliOptions, ExitCode } from './types';
+import { buildProjectConfig } from './config';
+import { generateProject } from './generator';
+import { runPrompts } from './prompts';
 import { ConsoleLogger } from './logger';
-import type { Logger, ScaffoldResult } from './types';
+import { CliError } from './errors';
 
-interface CliOptions {
-  readonly git: boolean;
-  readonly force: boolean;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pkg = require('../package.json');
+
+/**
+ * Collect stack keys from CLI flags.
+ */
+function collectStacks(opts: CliOptions): string[] {
+  const stacks: string[] = [];
+  if (opts.react) stacks.push('react');
+  if (opts.nextjs) stacks.push('nextjs');
+  if (opts.express) stacks.push('express');
+  if (opts.fastify) stacks.push('fastify');
+  if (opts.postgres) stacks.push('postgres');
+  if (opts.mongodb) stacks.push('mongodb');
+  if (opts.docker) stacks.push('docker');
+  if (opts.githubActions) stacks.push('github-actions');
+  return stacks;
 }
 
-export function buildProgram(): Command {
-  const program = new Command();
+/**
+ * Main entry point for the CLI.
+ */
+export async function main(argv?: string[]): Promise<void> {
+  const logger = new ConsoleLogger();
 
-  program
-    .exitOverride()
-    .name(CLI_NAME)
-    .description(CLI_DESCRIPTION)
-    .version(CLI_VERSION, '-v, --version', 'output the version number')
-    .argument('<project-name>', 'name of the project to create')
+  const program = new Command()
+    .name('create-core2code')
+    .description('Scaffold a new project using the Core2Code engineering framework.')
+    .version(pkg.version, '-v, --version')
+    .argument('[project-name]', 'name of the project to create')
     .option('--no-git', 'skip git repository initialization')
     .option('-f, --force', 'overwrite the target directory if it already exists', false)
-    .showHelpAfterError('(add --help for usage)')
-    .action(async (projectName: string, options: CliOptions) => {
-      const logger = new ConsoleLogger();
-      const result = await scaffoldProject({
-        projectName,
-        cwd: process.cwd(),
-        overwrite: options.force,
-        initGit: options.git,
-        logger,
-      });
-      printNextSteps(result, logger);
+    .option('-y, --yes', 'skip interactive prompts and use defaults', false)
+    .option('--react', 'include React frontend stack', false)
+    .option('--nextjs', 'include Next.js full-stack', false)
+    .option('--express', 'include Express backend stack', false)
+    .option('--fastify', 'include Fastify backend stack', false)
+    .option('--postgres', 'include PostgreSQL database stack', false)
+    .option('--mongodb', 'include MongoDB database stack', false)
+    .option('--docker', 'include Docker infrastructure stack', false)
+    .option('--github-actions', 'include GitHub Actions CI/CD stack', false);
+
+  program.parse(argv || process.argv);
+
+  const opts = program.opts<CliOptions>();
+  const args = program.args;
+  const projectNameArg = args[0];
+
+  try {
+    let projectName: string;
+    let stacks: string[];
+
+    if (opts.yes) {
+      // Non-interactive mode
+      projectName = projectNameArg || 'my-project';
+      stacks = collectStacks(opts);
+    } else if (projectNameArg && collectStacks(opts).length > 0) {
+      // Name + stacks provided via CLI args, skip prompts
+      projectName = projectNameArg;
+      stacks = collectStacks(opts);
+    } else {
+      // Interactive mode
+      const answers = await runPrompts(projectNameArg);
+      projectName = answers.projectName;
+      stacks = answers.stacks;
+    }
+
+    const config = buildProjectConfig({
+      projectName,
+      stacks,
+      initGit: opts.git !== false,
+      force: opts.force,
     });
 
-  return program;
-}
-
-function printNextSteps(result: ScaffoldResult, logger: Logger): void {
-  logger.plain('');
-  logger.success(`Created ${pc.bold(result.projectName)} at ${result.projectPath}`);
-  logger.plain('');
-  logger.plain(pc.bold('Next steps:'));
-  logger.plain(`  ${pc.cyan(`cd ${result.projectName}`)}`);
-  logger.plain(`  Open ${pc.cyan('PROJECT_BOOTSTRAP.md')} and work top to bottom.`);
-  logger.plain(`  Point your AI assistant at ${pc.cyan('CLAUDE.md')} / ${pc.cyan('AGENTS.md')}.`);
-  logger.plain(
-    `  Before shipping, run ${pc.cyan('09-checklists/production-hardening.md')}.`,
-  );
-  if (!result.gitInitialized) {
-    logger.plain(`  Initialize version control when ready: ${pc.cyan('git init')}`);
-  }
-  logger.plain('');
-}
-
-function reportError(error: unknown, logger: Logger): ExitCode {
-  if (error instanceof Core2CodeError) {
-    logger.error(error.message);
-    return error.exitCode;
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  logger.error(`Unexpected error: ${message}`);
-  if (process.env.CORE2CODE_DEBUG === '1' && error instanceof Error && error.stack) {
-    logger.plain(error.stack);
-  }
-  return ExitCode.GenericError;
-}
-
-export async function run(argv: readonly string[] = process.argv): Promise<void> {
-  const program = buildProgram();
-  try {
-    await program.parseAsync([...argv]);
-  } catch (error) {
-    if (isCommanderExit(error)) {
-      const code = (error as { exitCode?: number }).exitCode;
-      if (typeof code === 'number' && code !== 0) {
-        process.exitCode = code;
-      }
-      return;
+    await generateProject({ config, logger });
+  } catch (err) {
+    if (err instanceof CliError) {
+      logger.error(err.message);
+      process.exitCode = err.exitCode;
+    } else if (err instanceof Error) {
+      logger.error(err.message);
+      process.exitCode = ExitCode.Unknown;
+    } else {
+      logger.error('An unknown error occurred.');
+      process.exitCode = ExitCode.Unknown;
     }
-    process.exitCode = reportError(error, new ConsoleLogger());
   }
 }
 
-function isCommanderExit(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof (error as { code: unknown }).code === 'string' &&
-    (error as { code: string }).code.startsWith('commander.')
-  );
-}
-
+// Run when invoked directly
 if (require.main === module) {
-  void run();
+  main();
 }

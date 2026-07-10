@@ -1,139 +1,190 @@
-import os from 'node:os';
-import path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import path from 'path';
 import fs from 'fs-extra';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  copyDirectory,
   ensureDirectory,
-  isBinaryFile,
   isDirectoryEmpty,
+  copyDirectory,
   listFilesRecursively,
-  moveFile,
-  removeDirectorySafe,
+  isBinaryFile,
   replaceInFile,
   writeFile,
+  moveFile,
+  removeDirectorySafe,
+  pathExists,
 } from '../src/filesystem';
 
-let workdir: string;
+describe('filesystem', () => {
+  const testDir = path.join(__dirname, '.tmp-fs-test');
 
-beforeEach(async () => {
-  workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'c2c-fs-'));
-});
-
-afterEach(async () => {
-  await removeDirectorySafe(workdir);
-});
-
-describe('ensureDirectory / isDirectoryEmpty', () => {
-  it('creates a new directory and reports created=true', async () => {
-    const dir = path.join(workdir, 'fresh');
-    const result = await ensureDirectory(dir, false);
-    expect(result.created).toBe(true);
-    expect(await fs.pathExists(dir)).toBe(true);
+  beforeEach(async () => {
+    await fs.remove(testDir);
+    await fs.ensureDir(testDir);
   });
 
-  it('treats a missing or empty directory as empty', async () => {
-    const dir = path.join(workdir, 'empty');
-    expect(await isDirectoryEmpty(dir)).toBe(true);
-    await fs.ensureDir(dir);
-    expect(await isDirectoryEmpty(dir)).toBe(true);
+  afterEach(async () => {
+    await fs.remove(testDir);
   });
 
-  it('detects a non-empty directory', async () => {
-    const dir = path.join(workdir, 'full');
-    await fs.ensureDir(dir);
-    await fs.writeFile(path.join(dir, 'a.txt'), 'x');
-    expect(await isDirectoryEmpty(dir)).toBe(false);
+  describe('ensureDirectory', () => {
+    it('creates a new directory', async () => {
+      const dir = path.join(testDir, 'new-dir');
+      await ensureDirectory(dir);
+      expect(await fs.pathExists(dir)).toBe(true);
+    });
+
+    it('creates nested directories', async () => {
+      const dir = path.join(testDir, 'a', 'b', 'c');
+      await ensureDirectory(dir);
+      expect(await fs.pathExists(dir)).toBe(true);
+    });
+
+    it('does not fail if directory already exists', async () => {
+      await ensureDirectory(testDir);
+      expect(await fs.pathExists(testDir)).toBe(true);
+    });
   });
 
-  it('empties an existing directory when overwrite=true', async () => {
-    const dir = path.join(workdir, 'to-empty');
-    await fs.ensureDir(dir);
-    await fs.writeFile(path.join(dir, 'old.txt'), 'stale');
-    const result = await ensureDirectory(dir, true);
-    expect(result.created).toBe(false);
-    expect(await isDirectoryEmpty(dir)).toBe(true);
-  });
-});
+  describe('isDirectoryEmpty', () => {
+    it('returns true for empty directory', async () => {
+      expect(await isDirectoryEmpty(testDir)).toBe(true);
+    });
 
-describe('copyDirectory', () => {
-  it('copies a tree but skips excluded entries (.git)', async () => {
-    const src = path.join(workdir, 'src');
-    await fs.ensureDir(path.join(src, 'sub'));
-    await fs.ensureDir(path.join(src, '.git'));
-    await fs.writeFile(path.join(src, 'sub', 'file.txt'), 'hello');
-    await fs.writeFile(path.join(src, '.git', 'HEAD'), 'ref');
-    const dest = path.join(workdir, 'dest');
-    await copyDirectory(src, dest);
-    expect(await fs.pathExists(path.join(dest, 'sub', 'file.txt'))).toBe(true);
-    expect(await fs.pathExists(path.join(dest, '.git'))).toBe(false);
-  });
-});
+    it('returns false for non-empty directory', async () => {
+      await fs.writeFile(path.join(testDir, 'file.txt'), 'hello');
+      expect(await isDirectoryEmpty(testDir)).toBe(false);
+    });
 
-describe('listFilesRecursively', () => {
-  it('returns every file and no directories', async () => {
-    await fs.ensureDir(path.join(workdir, 'a', 'b'));
-    await fs.writeFile(path.join(workdir, 'top.txt'), '1');
-    await fs.writeFile(path.join(workdir, 'a', 'mid.txt'), '2');
-    await fs.writeFile(path.join(workdir, 'a', 'b', 'deep.txt'), '3');
-    const files = await listFilesRecursively(workdir);
-    expect(files).toHaveLength(3);
-    expect(files.every((f) => f.endsWith('.txt'))).toBe(true);
-  });
-});
-
-describe('replaceInFile', () => {
-  it('replaces tokens and reports modification', async () => {
-    const file = path.join(workdir, 'doc.md');
-    await fs.writeFile(file, 'Hello {{PROJECT_NAME}} and {{PROJECT_NAME}}');
-    const changed = await replaceInFile(
-      file,
-      new Map([['{{PROJECT_NAME}}', 'demo']]),
-    );
-    expect(changed).toBe(true);
-    expect(await fs.readFile(file, 'utf8')).toBe('Hello demo and demo');
+    it('returns true for non-existent directory', async () => {
+      expect(await isDirectoryEmpty(path.join(testDir, 'nope'))).toBe(true);
+    });
   });
 
-  it('does not write when no token is present', async () => {
-    const file = path.join(workdir, 'plain.md');
-    await fs.writeFile(file, 'nothing to replace');
-    const before = (await fs.stat(file)).mtimeMs;
-    const changed = await replaceInFile(file, new Map([['{{X}}', 'y']]));
-    expect(changed).toBe(false);
-    const after = (await fs.stat(file)).mtimeMs;
-    expect(after).toBe(before);
+  describe('copyDirectory', () => {
+    it('copies directory contents', async () => {
+      const src = path.join(testDir, 'src');
+      const dest = path.join(testDir, 'dest');
+      await fs.ensureDir(src);
+      await fs.writeFile(path.join(src, 'file.txt'), 'content');
+
+      await copyDirectory(src, dest);
+      expect(await fs.readFile(path.join(dest, 'file.txt'), 'utf-8')).toBe('content');
+    });
+
+    it('copies nested directories', async () => {
+      const src = path.join(testDir, 'src');
+      await fs.ensureDir(path.join(src, 'sub'));
+      await fs.writeFile(path.join(src, 'sub', 'nested.txt'), 'nested');
+
+      const dest = path.join(testDir, 'dest');
+      await copyDirectory(src, dest);
+      expect(await fs.readFile(path.join(dest, 'sub', 'nested.txt'), 'utf-8')).toBe('nested');
+    });
   });
 
-  it('skips binary files', async () => {
-    const file = path.join(workdir, 'logo.png');
-    await fs.writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    const changed = await replaceInFile(file, new Map([['PNG', 'x']]));
-    expect(changed).toBe(false);
-  });
-});
+  describe('listFilesRecursively', () => {
+    it('returns all files with relative paths', async () => {
+      await fs.writeFile(path.join(testDir, 'a.txt'), '');
+      await fs.ensureDir(path.join(testDir, 'sub'));
+      await fs.writeFile(path.join(testDir, 'sub', 'b.txt'), '');
 
-describe('isBinaryFile', () => {
-  it('classifies by extension', () => {
-    expect(isBinaryFile('/x/y.png')).toBe(true);
-    expect(isBinaryFile('/x/y.md')).toBe(false);
-    expect(isBinaryFile('/x/Y.PNG')).toBe(true);
-  });
-});
+      const files = await listFilesRecursively(testDir);
+      expect(files.sort()).toEqual(['a.txt', path.join('sub', 'b.txt')].sort());
+    });
 
-describe('writeFile / moveFile', () => {
-  it('creates parent directories on write', async () => {
-    const file = path.join(workdir, 'nested', 'deep', 'out.txt');
-    await writeFile(file, 'content');
-    expect(await fs.readFile(file, 'utf8')).toBe('content');
+    it('returns empty array for empty directory', async () => {
+      const files = await listFilesRecursively(testDir);
+      expect(files).toEqual([]);
+    });
+
+    it('returns empty array for non-existent directory', async () => {
+      const files = await listFilesRecursively(path.join(testDir, 'nope'));
+      expect(files).toEqual([]);
+    });
   });
 
-  it('moves a file, overwriting the destination', async () => {
-    const from = path.join(workdir, 'from.txt');
-    const to = path.join(workdir, 'to.txt');
-    await fs.writeFile(from, 'moved');
-    await fs.writeFile(to, 'old');
-    await moveFile(from, to);
-    expect(await fs.pathExists(from)).toBe(false);
-    expect(await fs.readFile(to, 'utf8')).toBe('moved');
+  describe('isBinaryFile', () => {
+    it('identifies binary extensions', () => {
+      expect(isBinaryFile('image.png')).toBe(true);
+      expect(isBinaryFile('font.woff2')).toBe(true);
+      expect(isBinaryFile('archive.zip')).toBe(true);
+      expect(isBinaryFile('doc.pdf')).toBe(true);
+    });
+
+    it('identifies non-binary extensions', () => {
+      expect(isBinaryFile('code.ts')).toBe(false);
+      expect(isBinaryFile('readme.md')).toBe(false);
+      expect(isBinaryFile('config.json')).toBe(false);
+      expect(isBinaryFile('style.css')).toBe(false);
+    });
+  });
+
+  describe('replaceInFile', () => {
+    it('replaces text in a file', async () => {
+      const file = path.join(testDir, 'test.txt');
+      await fs.writeFile(file, 'Hello {{name}}, welcome!');
+
+      await replaceInFile(file, /\{\{name\}\}/g, 'World');
+      expect(await fs.readFile(file, 'utf-8')).toBe('Hello World, welcome!');
+    });
+
+    it('replaces string patterns', async () => {
+      const file = path.join(testDir, 'test.txt');
+      await fs.writeFile(file, 'foo bar foo');
+
+      await replaceInFile(file, 'foo', 'baz');
+      expect(await fs.readFile(file, 'utf-8')).toBe('baz bar foo');
+    });
+  });
+
+  describe('writeFile', () => {
+    it('writes content to a file', async () => {
+      const file = path.join(testDir, 'output.txt');
+      await writeFile(file, 'hello world');
+      expect(await fs.readFile(file, 'utf-8')).toBe('hello world');
+    });
+
+    it('creates parent directories', async () => {
+      const file = path.join(testDir, 'deep', 'nested', 'file.txt');
+      await writeFile(file, 'content');
+      expect(await fs.readFile(file, 'utf-8')).toBe('content');
+    });
+  });
+
+  describe('moveFile', () => {
+    it('moves a file to a new location', async () => {
+      const src = path.join(testDir, 'source.txt');
+      const dest = path.join(testDir, 'dest.txt');
+      await fs.writeFile(src, 'content');
+
+      await moveFile(src, dest);
+      expect(await fs.pathExists(src)).toBe(false);
+      expect(await fs.readFile(dest, 'utf-8')).toBe('content');
+    });
+  });
+
+  describe('removeDirectorySafe', () => {
+    it('removes a directory and its contents', async () => {
+      const dir = path.join(testDir, 'to-remove');
+      await fs.ensureDir(dir);
+      await fs.writeFile(path.join(dir, 'file.txt'), 'content');
+
+      await removeDirectorySafe(dir);
+      expect(await fs.pathExists(dir)).toBe(false);
+    });
+
+    it('does not throw for non-existent directory', async () => {
+      await expect(removeDirectorySafe(path.join(testDir, 'nope'))).resolves.not.toThrow();
+    });
+  });
+
+  describe('pathExists', () => {
+    it('returns true for existing path', async () => {
+      expect(await pathExists(testDir)).toBe(true);
+    });
+
+    it('returns false for non-existing path', async () => {
+      expect(await pathExists(path.join(testDir, 'nope'))).toBe(false);
+    });
   });
 });

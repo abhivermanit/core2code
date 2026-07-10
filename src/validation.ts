@@ -1,42 +1,43 @@
-import { MAX_PROJECT_NAME_LENGTH, RESERVED_NAMES } from './constants';
+import { NAME_PATTERN, MAX_NAME_LENGTH } from './constants';
 import { InvalidProjectNameError } from './errors';
-import type { ValidationResult } from './types';
 
-const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+/**
+ * Result of validating a project name.
+ */
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+}
 
-export function validateProjectName(projectName: string): ValidationResult {
+/**
+ * Validate a project name against naming rules.
+ * Returns a result object with validity and any error messages.
+ */
+export function validateProjectName(name: string): ValidationResult {
   const errors: string[] = [];
-  const name = projectName?.trim() ?? '';
 
-  if (name.length === 0) {
-    errors.push('name must not be empty');
-    return { valid: false, errors };
-  }
-
-  if (name.length > MAX_PROJECT_NAME_LENGTH) {
-    errors.push(`name must be ${MAX_PROJECT_NAME_LENGTH} characters or fewer`);
-  }
-
-  if (!NAME_PATTERN.test(name)) {
-    errors.push(
-      'name may contain only letters, digits, ".", "-" and "_", and must start with a letter or digit',
-    );
-  }
-
-  if (name.endsWith('.')) {
-    errors.push('name must not end with a dot');
-  }
-
-  if (RESERVED_NAMES.has(name.toLowerCase())) {
-    errors.push(`"${name}" is a reserved name`);
+  if (!name || name.trim().length === 0) {
+    errors.push('Project name cannot be empty');
+  } else {
+    if (name.length > MAX_NAME_LENGTH) {
+      errors.push(`Project name must be ${MAX_NAME_LENGTH} characters or fewer`);
+    }
+    if (!NAME_PATTERN.test(name)) {
+      errors.push(
+        'Project name must start with a lowercase letter, and contain only lowercase letters, numbers, hyphens, or underscores',
+      );
+    }
   }
 
   return { valid: errors.length === 0, errors };
 }
 
-export function assertValidProjectName(projectName: string): void {
-  const result = validateProjectName(projectName);
+/**
+ * Assert that a project name is valid, throwing if not.
+ */
+export function assertValidProjectName(name: string): void {
+  const result = validateProjectName(name);
   if (!result.valid) {
-    throw new InvalidProjectNameError(projectName, result.errors);
+    throw new InvalidProjectNameError(name, result.errors.join('; '));
   }
 }

@@ -1,37 +1,28 @@
-/**
- * Public programmatic API.
- */
-export { scaffoldProject } from './generator';
-export { buildProgram, run } from './cli';
-export {
-  createTemplateContext,
-  renderString,
-  renderProjectReadme,
-  applyContextToTree,
-  buildReplacements,
-} from './template';
+// Public API
+export { generateProject } from './generator';
+export { buildProjectConfig } from './config';
+export { createSilentLogger, ConsoleLogger, SilentLogger } from './logger';
 export { validateProjectName, assertValidProjectName } from './validation';
 export { isGitAvailable, initRepository } from './git';
-export { ConsoleLogger, SilentLogger, createSilentLogger } from './logger';
-export {
-  Core2CodeError,
-  InvalidProjectNameError,
-  DirectoryExistsError,
-  TemplateNotFoundError,
-  FileSystemError,
-  ExitCode,
-} from './errors';
-export {
-  CLI_NAME,
-  CLI_VERSION,
-  CLI_DESCRIPTION,
-  PLACEHOLDERS,
-  resolveTemplateRoot,
-} from './constants';
+export { getAllStacks, getStacksByCategory, isValidStack, resolveStacks, findInvalidStacks, getCategories } from './registry';
+export { resolveTemplatePath, resolveCommonTemplatePath, resolveAllTemplatePaths } from './templateResolver';
+export { runPrompts } from './prompts';
+
+// Types
 export type {
+  ExitCode,
+  StackCategory,
+  StackDefinition,
+  PromptAnswers,
+  GeneratorOptions,
+  GeneratorResult,
+  ProjectConfig,
   Logger,
-  TemplateContext,
-  ScaffoldOptions,
-  ScaffoldResult,
-  ValidationResult,
+  CliOptions,
 } from './types';
+
+// Errors
+export { CliError, InvalidProjectNameError, FileSystemError, GitError, AbortedError, InvalidStackError } from './errors';
+
+// Constants
+export { STACKS, STACK_MAP, VALID_STACK_KEYS, TEMPLATE_DIR, PACKAGE_ROOT, NAME_PATTERN, MAX_NAME_LENGTH } from './constants';
