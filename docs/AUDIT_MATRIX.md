@@ -73,9 +73,10 @@ prioritization.
 
 ---
 
-## Phase 1 — Discovery
+## Phase 1 — Discovery — ✅ Shipped (v0.6 Discovery Audit Pack)
 
-*Is there a defined problem before there's code?*
+*Is there a defined problem before there's code?* Implemented in
+`src/audit/checks/discovery.ts`.
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
@@ -197,7 +198,12 @@ predating this spec — see Open Items below for reconciliation.)
 2. Write full [AUDIT_SPEC.md](AUDIT_SPEC.md)-conformant records
    (why/evidence/pass/fail/remediation/references) for each check —
    authored per-phase, in the order the phase is actually implemented, not
-   all 62 upfront.
-3. Decide how `manual_review` surfaces in `CheckStatus` / `AuditReport` —
-   an engine change, deferred to when a phase with manual checks
-   (Discovery is first) actually gets implemented.
+   all 62 upfront. Discovery's checks carry `evidence`/`remediation`
+   informally in code comments/messages, not as separate spec-record
+   files yet — still an open item even for the shipped phase.
+3. ~~Decide how `manual_review` surfaces in `CheckStatus` / `AuditReport`~~
+   — done in v0.6: `CheckStatus` gained `'manual_review'`, scoring
+   (`computeScore`/`computePhaseScores`) excludes it same as `skip`, and
+   the report has a dedicated "Needs Review" section plus a
+   `needsReview` count on `AuditReport`. Next packs with manual checks
+   (Architecture, Security, Quality, Delivery) reuse this as-is.

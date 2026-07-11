@@ -47,6 +47,7 @@ export async function runAudit(projectDir: string): Promise<AuditReport> {
   const passed = results.filter((r) => r.status === 'pass').length;
   const failed = results.filter((r) => r.status === 'fail').length;
   const skipped = results.filter((r) => r.status === 'skip').length;
+  const needsReview = results.filter((r) => r.status === 'manual_review').length;
 
   return {
     projectDir: ctx.projectDir,
@@ -58,5 +59,6 @@ export async function runAudit(projectDir: string): Promise<AuditReport> {
     passed,
     failed,
     skipped,
+    needsReview,
   };
 }

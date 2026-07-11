@@ -9,8 +9,11 @@ export type Severity = 'error' | 'warn' | 'info';
 
 /**
  * The result status of an individual audit check.
+ *
+ * `manual_review` is returned by `manual`-type checks (see AUDIT_SPEC.md) —
+ * a question a tool can't reliably infer, so it's never faked as pass/fail.
  */
-export type CheckStatus = 'pass' | 'fail' | 'skip';
+export type CheckStatus = 'pass' | 'fail' | 'skip' | 'manual_review';
 
 /**
  * A single audit check result.
@@ -22,12 +25,16 @@ export interface CheckResult {
   severity: Severity;
   message: string;
   phase: AuditPhase;
+  /** Guidance on what to do when status is 'fail' or 'manual_review'. */
+  remediation?: string;
 }
 
 /**
- * Category grouping for audit checks.
+ * Category grouping for audit checks. Engineering/Quality use the finer
+ * sub-categories below; phases without sub-categories (Discovery, and
+ * others as they're implemented) use their own phase name.
  */
-export type AuditCategory = 'structure' | 'dependencies' | 'config' | 'git' | 'quality';
+export type AuditCategory = 'structure' | 'dependencies' | 'config' | 'git' | 'quality' | 'discovery';
 
 /**
  * Lifecycle phase a check belongs to, per the Core2Code production
@@ -68,6 +75,12 @@ export interface AuditContext {
   hasTsConfig: boolean;
   /** List of files in the project root. */
   rootFiles: string[];
+  /**
+   * Relative POSIX paths of markdown docs found at the project root and
+   * under docs/ or documentation/ (if present). Used by evidence-based
+   * checks that shouldn't hard-require a specific file path.
+   */
+  docFiles: string[];
 }
 
 /**
@@ -111,6 +124,7 @@ export interface AuditReport {
   passed: number;
   failed: number;
   skipped: number;
+  needsReview: number;
 }
 
 /**

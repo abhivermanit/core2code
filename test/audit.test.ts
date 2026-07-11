@@ -50,6 +50,21 @@ describe('audit', () => {
       expect(ctx.hasGit).toBe(true);
       expect(ctx.hasTsConfig).toBe(true);
     });
+
+    it('finds markdown docs at root and nested under docs/', async () => {
+      await fs.writeFile(path.join(tmpDir, 'README.md'), '# Root doc\n');
+      await fs.ensureDir(path.join(tmpDir, 'docs', 'nested'));
+      await fs.writeFile(path.join(tmpDir, 'docs', 'PRD.md'), '# PRD\n');
+      await fs.writeFile(path.join(tmpDir, 'docs', 'nested', 'risks.md'), '# Risks\n');
+      await fs.ensureDir(path.join(tmpDir, 'docs', 'node_modules', 'somepkg'));
+      await fs.writeFile(path.join(tmpDir, 'docs', 'node_modules', 'somepkg', 'README.md'), '# Ignore me\n');
+
+      const ctx = await buildAuditContext(tmpDir);
+      expect(ctx.docFiles).toContain('README.md');
+      expect(ctx.docFiles).toContain('docs/PRD.md');
+      expect(ctx.docFiles).toContain('docs/nested/risks.md');
+      expect(ctx.docFiles.some((f) => f.includes('node_modules'))).toBe(false);
+    });
   });
 
   describe('computeScore', () => {
@@ -98,10 +113,10 @@ describe('audit', () => {
         { id: 'a', label: 'A', status: 'pass' as const, severity: 'error' as const, phase: 'engineering' as const, message: '' },
       ];
       const phaseScores = computePhaseScores(results);
-      const discovery = phaseScores.find((p) => p.phase === 'discovery')!;
-      expect(discovery.checkCount).toBe(0);
-      expect(discovery.percentage).toBeNull();
-      expect(discovery.grade).toBeNull();
+      const architecture = phaseScores.find((p) => p.phase === 'architecture')!;
+      expect(architecture.checkCount).toBe(0);
+      expect(architecture.percentage).toBeNull();
+      expect(architecture.grade).toBeNull();
     });
 
     it('computes percentage for a phase with mixed pass/fail results', () => {
@@ -118,6 +133,27 @@ describe('audit', () => {
     it('covers every phase in PHASE_ORDER', () => {
       const phaseScores = computePhaseScores([]);
       expect(phaseScores).toHaveLength(7);
+    });
+
+    it('excludes manual_review from scoring, reporting N/A if that is all a phase has', () => {
+      const results = [
+        { id: 'a', label: 'A', status: 'manual_review' as const, severity: 'error' as const, phase: 'discovery' as const, message: '' },
+      ];
+      const phaseScores = computePhaseScores(results);
+      const discovery = phaseScores.find((p) => p.phase === 'discovery')!;
+      expect(discovery.checkCount).toBe(1);
+      expect(discovery.percentage).toBeNull();
+    });
+
+    it('scores a phase from automatic checks only, ignoring manual_review results', () => {
+      const results = [
+        { id: 'a', label: 'A', status: 'pass' as const, severity: 'error' as const, phase: 'discovery' as const, message: '' },
+        { id: 'b', label: 'B', status: 'manual_review' as const, severity: 'error' as const, phase: 'discovery' as const, message: '' },
+      ];
+      const phaseScores = computePhaseScores(results);
+      const discovery = phaseScores.find((p) => p.phase === 'discovery')!;
+      expect(discovery.checkCount).toBe(2);
+      expect(discovery.percentage).toBe(100);
     });
   });
 
@@ -165,21 +201,37 @@ describe('audit', () => {
   });
 
   describe('runAudit', () => {
-    it('produces a passing report for a well-formed project', async () => {
-      await fs.writeJson(path.join(tmpDir, 'package.json'), {
+    async function writeWellFormedProject(dir: string): Promise<void> {
+      await fs.writeJson(path.join(dir, 'package.json'), {
         name: 'good-project',
         scripts: { test: 'vitest', build: 'tsc' },
         engines: { node: '>=18' },
       });
-      await fs.ensureDir(path.join(tmpDir, 'src'));
-      await fs.ensureDir(path.join(tmpDir, '.git'));
-      await fs.writeFile(path.join(tmpDir, '.gitignore'), 'node_modules\n');
-      await fs.writeFile(path.join(tmpDir, 'README.md'), '# Good Project\n');
-      await fs.writeJson(path.join(tmpDir, 'tsconfig.json'), {
+      await fs.ensureDir(path.join(dir, 'src'));
+      await fs.ensureDir(path.join(dir, '.git'));
+      await fs.writeFile(path.join(dir, '.gitignore'), 'node_modules\n');
+      await fs.writeFile(path.join(dir, 'README.md'), '# Good Project\n');
+      await fs.writeJson(path.join(dir, 'tsconfig.json'), {
         compilerOptions: { strict: true },
       });
-      await fs.writeFile(path.join(tmpDir, 'eslint.config.js'), 'module.exports = {};\n');
-      await fs.writeFile(path.join(tmpDir, 'vitest.config.ts'), 'export default {};\n');
+      await fs.writeFile(path.join(dir, 'eslint.config.js'), 'module.exports = {};\n');
+      await fs.writeFile(path.join(dir, 'vitest.config.ts'), 'export default {};\n');
+
+      const substantiveDoc = (title: string) =>
+        `# ${title}\n\nLine one.\nLine two.\nLine three.\nLine four.\nLine five.\n`;
+      await fs.ensureDir(path.join(dir, 'docs'));
+      await fs.writeFile(path.join(dir, 'docs', 'PRD.md'), substantiveDoc('PRD'));
+      await fs.writeFile(path.join(dir, 'docs', 'requirements.md'), substantiveDoc('Requirements'));
+      await fs.writeFile(
+        path.join(dir, 'docs', 'non-functional-requirements.md'),
+        substantiveDoc('Non-Functional Requirements'),
+      );
+      await fs.writeFile(path.join(dir, 'docs', 'risks.md'), substantiveDoc('Risks'));
+      await fs.writeFile(path.join(dir, 'docs', 'assumptions.md'), substantiveDoc('Assumptions'));
+    }
+
+    it('produces a passing report for a well-formed project', async () => {
+      await writeWellFormedProject(tmpDir);
 
       const report = await runAudit(tmpDir);
       expect(report.score.percentage).toBe(100);
@@ -188,6 +240,9 @@ describe('audit', () => {
       expect(report.passed).toBeGreaterThan(0);
       expect(report.phaseScores).toHaveLength(7);
       expect(report.readyForProduction).toBe(true);
+      // DISC-002 and DISC-007 are manual, so they never count as failures
+      // or move the score, but should still surface as needing review.
+      expect(report.needsReview).toBe(2);
     });
 
     it('produces a failing report for an empty directory', async () => {
@@ -199,6 +254,78 @@ describe('audit', () => {
     it('includes timestamp in ISO format', async () => {
       const report = await runAudit(tmpDir);
       expect(report.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+  });
+
+  describe('Discovery checks', () => {
+    function discoveryChecks() {
+      return ALL_CHECKS.filter((c) => c.phase === 'discovery');
+    }
+
+    it('has 7 checks, ids DISC-001..007', () => {
+      const ids = discoveryChecks()
+        .map((c) => c.id)
+        .sort();
+      expect(ids).toEqual([
+        'DISC-001',
+        'DISC-002',
+        'DISC-003',
+        'DISC-004',
+        'DISC-005',
+        'DISC-006',
+        'DISC-007',
+      ]);
+    });
+
+    it('DISC-002 and DISC-007 always return manual_review, regardless of directory contents', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const manualChecks = discoveryChecks().filter((c) => c.id === 'DISC-002' || c.id === 'DISC-007');
+      for (const check of manualChecks) {
+        const result = await check.run(ctx);
+        expect(result.status).toBe('manual_review');
+        expect(result.remediation).toBeTruthy();
+      }
+    });
+
+    it('DISC-001 fails when no PRD/vision doc exists', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const check = discoveryChecks().find((c) => c.id === 'DISC-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+    });
+
+    it('DISC-001 passes when a substantive PRD exists under docs/', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'docs'));
+      await fs.writeFile(
+        path.join(tmpDir, 'docs', 'PRD.md'),
+        '# PRD\n\nLine one.\nLine two.\nLine three.\nLine four.\nLine five.\n',
+      );
+      const ctx = await buildAuditContext(tmpDir);
+      const check = discoveryChecks().find((c) => c.id === 'DISC-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+
+    it('DISC-001 fails (not passes) when the PRD file exists but is near-empty', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'docs'));
+      await fs.writeFile(path.join(tmpDir, 'docs', 'PRD.md'), '# PRD\n');
+      const ctx = await buildAuditContext(tmpDir);
+      const check = discoveryChecks().find((c) => c.id === 'DISC-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+      expect(result.message).toMatch(/empty/);
+    });
+
+    it('DISC-003 does not match the non-functional-requirements doc', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'docs'));
+      await fs.writeFile(
+        path.join(tmpDir, 'docs', 'non-functional-requirements.md'),
+        '# NFR\n\nLine one.\nLine two.\nLine three.\nLine four.\nLine five.\n',
+      );
+      const ctx = await buildAuditContext(tmpDir);
+      const check = discoveryChecks().find((c) => c.id === 'DISC-003')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
     });
   });
 });

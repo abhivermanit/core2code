@@ -76,25 +76,34 @@ authored per-phase as each phase is implemented, not all 62 upfront — and
 design how `manual_review` fits into `CheckStatus`/`AuditReport` when
 Discovery (the first phase with manual checks) is implemented.
 
-### Milestone 2 — Implement the audit matrix, shipped vertically by phase
+### Milestone 2 — Audit Packs
 
-Per CTO decision: don't implement all 62 checks in one release. Ship one
-phase per minor version so users get value every release instead of waiting
-for one large one. Each release: write that phase's spec-conformant check
-records, implement them in `src/audit/checks/`, extend the engine only as
-that phase's checks require (e.g. `manual_review` status support lands with
-Discovery, since it's the first phase with manual checks).
+Per CTO decision: don't implement all 62 checks in one release, and think of
+each phase's implementation as a self-contained **Audit Pack**, not just "a
+phase got implemented." Each pack bundles:
 
-- **v0.6 — Discovery** (7 checks: DISC-001..007)
-- **v0.7 — Architecture** (9 checks: ARCH-001..009)
-- **v0.8 — Security** (11 checks: SEC-001..011)
-- **v0.9 — Quality** (8 checks: QUAL-001..008)
-- **v1.0 — Delivery + Operations + Production Readiness Certification**
+- Spec-conformant check records ([AUDIT_SPEC.md](docs/AUDIT_SPEC.md) format)
+- Engine implementation (`src/audit/checks/<phase>.ts`)
+- Tests
+- Documentation (README/matrix updates)
+
+Engine changes only happen when a pack requires them (e.g. `manual_review`
+status support lands with the Discovery pack, since it's the first phase
+with manual checks) — no framework changes for their own sake from here on.
+
+- **v0.6 — Discovery Audit Pack** — ✅ Done (7 checks: DISC-001..007). First
+  pack to exercise `manual_review` as a real engine status (DISC-002,
+  DISC-007) and the new evidence-based doc scanning (`AuditContext.docFiles`,
+  `findEvidenceDoc`) that later packs reuse.
+- **v0.7 — Architecture Audit Pack** (9 checks: ARCH-001..009)
+- **v0.8 — Security Audit Pack** (11 checks: SEC-001..011)
+- **v0.9 — Quality Audit Pack** (8 checks: QUAL-001..008)
+- **v1.0 — Delivery Audit Pack + Operations Audit Pack + Production Readiness Certification**
   (8 + 9 = 17 checks: DEL-001..008, OPS-001..009, plus a formal
   "certified production ready" report/badge once all 7 phases are scored)
 
 Engineering (already shipped, 10 checks in the matrix vs. 12 shipped) gets
-reconciled opportunistically, not as its own release — see matrix Open Item 1.
+reconciled opportunistically, not as its own pack — see matrix Open Item 1.
 
 ### Milestone 3 — Deepen scoring
 

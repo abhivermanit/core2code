@@ -10,7 +10,11 @@ const POINTS: Record<string, number> = {
   pass: 10,
   fail: 0,
   skip: 0,
+  manual_review: 0,
 };
+
+/** Statuses that were never mechanically verified, so can't move a score. */
+const UNSCORED_STATUSES = new Set(['skip', 'manual_review']);
 
 /**
  * Determine a letter grade from a percentage score.
@@ -27,8 +31,8 @@ function letterGrade(pct: number): string {
  * Calculate the audit score from check results.
  */
 export function computeScore(results: CheckResult[]): AuditScore {
-  // Only count non-skipped checks toward possible total
-  const scored = results.filter((r) => r.status !== 'skip');
+  // Only count mechanically-verified checks toward possible total
+  const scored = results.filter((r) => !UNSCORED_STATUSES.has(r.status));
 
   const earned = scored.reduce((sum, r) => sum + (POINTS[r.status] ?? 0), 0);
   const possible = scored.length * (POINTS['pass'] ?? 0);
@@ -47,13 +51,15 @@ export function computeScore(results: CheckResult[]): AuditScore {
 export function computePhaseScores(results: CheckResult[]): PhaseScore[] {
   return PHASE_ORDER.map((phase) => {
     const phaseResults = results.filter((r) => r.phase === phase);
-    const scored = phaseResults.filter((r) => r.status !== 'skip');
+    const scored = phaseResults.filter((r) => !UNSCORED_STATUSES.has(r.status));
 
     const earned = scored.reduce((sum, r) => sum + (POINTS[r.status] ?? 0), 0);
     const possible = scored.length * (POINTS['pass'] ?? 0);
 
     const checkCount = phaseResults.length;
-    const percentage = checkCount === 0 ? null : possible > 0 ? Math.round((earned / possible) * 100) : 100;
+    // Null (N/A) when nothing in this phase was mechanically verified,
+    // even if manual/skip results exist — those don't count as "evaluated".
+    const percentage = scored.length === 0 ? null : possible > 0 ? Math.round((earned / possible) * 100) : 100;
     const grade = percentage === null ? null : letterGrade(percentage);
 
     return {

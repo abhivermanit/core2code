@@ -95,10 +95,17 @@ score averages only the phases that have been evaluated, and a project is
 flagged `✔ Production Ready` once that average crosses the readiness
 threshold (80%).
 
+Not every check can be answered automatically. Some ask a quality/soundness
+question (is the scope well-bounded, is the problem statement specific) that
+a tool can't reliably judge — those are `manual` checks and always show up
+under a **Needs Review** section instead of being silently scored pass/fail.
+See [docs/AUDIT_SPEC.md](docs/AUDIT_SPEC.md) for the automatic-vs-manual
+check format.
+
 ```
 Production Readiness
 
-  Discovery      N/A
+  Discovery       86%
   Architecture   N/A
   Engineering     91%
   Security       N/A
@@ -106,15 +113,21 @@ Production Readiness
   Delivery       N/A
   Operations     N/A
 
-Overall: 96%
+Overall: 92%
 ✔ Production Ready
+
+Needs Review
+  ◐ Scope (in/out) is explicitly bounded
+    Confirm the project explicitly states what is in scope and out of scope...
+    → Add an explicit "Scope" / "Out of scope" section to the PRD or README.
 ```
 
-As of v0.5.0, checks are implemented for the **Engineering** and **Quality**
-phases only (repo structure, config, git hygiene, dependency policy, lint/test
-setup — 12 checks total). The other five phases are registered in the engine
-but intentionally empty; they'll be filled in as the audit matrix for each
-phase is designed. See [ROADMAP.md](ROADMAP.md) for the plan.
+As of v0.6.0, checks are implemented for the **Discovery**, **Engineering**,
+and **Quality** phases (19 checks total: 7 Discovery, 11 Engineering, 1
+Quality). The other four phases are registered in the engine but
+intentionally empty; each ships as its own "Audit Pack" — see
+[ROADMAP.md](ROADMAP.md) for the release plan and
+[docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md) for the full 62-check design.
 
 The audit exits non-zero if any `error`-severity check fails, so it can gate CI.
 
