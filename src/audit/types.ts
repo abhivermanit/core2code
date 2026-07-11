@@ -21,6 +21,7 @@ export interface CheckResult {
   status: CheckStatus;
   severity: Severity;
   message: string;
+  phase: AuditPhase;
 }
 
 /**
@@ -29,12 +30,26 @@ export interface CheckResult {
 export type AuditCategory = 'structure' | 'dependencies' | 'config' | 'git' | 'quality';
 
 /**
+ * Lifecycle phase a check belongs to, per the Core2Code production
+ * readiness model (Discovery -> Operations).
+ */
+export type AuditPhase =
+  | 'discovery'
+  | 'architecture'
+  | 'engineering'
+  | 'security'
+  | 'quality'
+  | 'delivery'
+  | 'operations';
+
+/**
  * Definition of an audit check to run.
  */
 export interface AuditCheck {
   id: string;
   label: string;
   category: AuditCategory;
+  phase: AuditPhase;
   severity: Severity;
   run: (ctx: AuditContext) => Promise<CheckResult> | CheckResult;
 }
@@ -70,6 +85,20 @@ export interface AuditScore {
 }
 
 /**
+ * Computed score for a single lifecycle phase. `percentage`/`grade` are
+ * `null` when the phase has no checks registered yet (N/A, not 0%).
+ */
+export interface PhaseScore {
+  phase: AuditPhase;
+  label: string;
+  earned: number;
+  possible: number;
+  percentage: number | null;
+  grade: string | null;
+  checkCount: number;
+}
+
+/**
  * Full audit report.
  */
 export interface AuditReport {
@@ -77,6 +106,8 @@ export interface AuditReport {
   timestamp: string;
   results: CheckResult[];
   score: AuditScore;
+  phaseScores: PhaseScore[];
+  readyForProduction: boolean;
   passed: number;
   failed: number;
   skipped: number;

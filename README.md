@@ -65,6 +65,59 @@ through selecting a project name and technology stacks:
 | `docker` | Infra | Dockerfile, docker-compose, and multi-stage builds |
 | `github-actions` | Infra | CI/CD pipeline with GitHub Actions |
 
+## Audit
+
+`create-core2code audit` scans an existing project and reports a **production
+readiness** score across the software engineering lifecycle, not just repo
+hygiene.
+
+```bash
+npx create-core2code audit [path]      # human-readable report
+npx create-core2code audit [path] --json   # machine-readable, for CI
+npx create-core2code audit [path] --verbose
+```
+
+Checks are organized into seven lifecycle **phases**, run in this order:
+
+| Phase | What it covers |
+| --- | --- |
+| Discovery | Vision, problem statement, scope, requirements, risks |
+| Architecture | Architecture docs, ADRs, auth design, data model, API contracts, threat model |
+| Engineering | Project structure, coding standards, configuration, dependency policy |
+| Security | AuthN/AuthZ, secrets, rate limiting, input validation, OWASP controls |
+| Quality | Unit/integration/API/security/performance/accessibility tests |
+| Delivery | CI/CD, environments, SSL, rollback, migrations, versioning |
+| Operations | Monitoring, logging, alerts, backups, disaster recovery, cost |
+
+Each phase gets its own score; a phase with no checks registered yet reports
+`N/A` rather than 0% (it hasn't been evaluated, not failed). The **Overall**
+score averages only the phases that have been evaluated, and a project is
+flagged `✔ Production Ready` once that average crosses the readiness
+threshold (80%).
+
+```
+Production Readiness
+
+  Discovery      N/A
+  Architecture   N/A
+  Engineering     91%
+  Security       N/A
+  Quality        100%
+  Delivery       N/A
+  Operations     N/A
+
+Overall: 96%
+✔ Production Ready
+```
+
+As of v0.5.0, checks are implemented for the **Engineering** and **Quality**
+phases only (repo structure, config, git hygiene, dependency policy, lint/test
+setup — 12 checks total). The other five phases are registered in the engine
+but intentionally empty; they'll be filled in as the audit matrix for each
+phase is designed. See [ROADMAP.md](ROADMAP.md) for the plan.
+
+The audit exits non-zero if any `error`-severity check fails, so it can gate CI.
+
 ## Programmatic API
 
 ```typescript

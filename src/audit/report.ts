@@ -4,6 +4,7 @@
 
 import pc from 'picocolors';
 import { AuditReport, CheckResult } from './types';
+import { computeOverallReadiness } from './score';
 
 /**
  * Format the audit report for terminal output.
@@ -13,6 +14,30 @@ export function formatReport(report: AuditReport, verbose: boolean): string {
 
   lines.push('');
   lines.push(pc.bold(`Audit Report: ${report.projectDir}`));
+  lines.push(pc.dim(`─`.repeat(60)));
+  lines.push('');
+
+  lines.push(pc.bold('  Production Readiness'));
+  lines.push('');
+  for (const p of report.phaseScores) {
+    const label = p.label.padEnd(14);
+    if (p.percentage === null) {
+      lines.push(`    ${label} ${pc.dim('N/A')}`);
+    } else {
+      const color = p.percentage >= 80 ? pc.green : p.percentage >= 60 ? pc.yellow : pc.red;
+      lines.push(`    ${label} ${color(`${p.percentage}%`.padStart(4))}`);
+    }
+  }
+  const overall = computeOverallReadiness(report.phaseScores);
+  const overallColor = overall.percentage >= 80 ? pc.green : overall.percentage >= 60 ? pc.yellow : pc.red;
+  lines.push('');
+  lines.push(`  Overall: ${overallColor(`${overall.percentage}%`)}`);
+  lines.push(
+    report.readyForProduction
+      ? pc.green('  ✔ Production Ready')
+      : pc.red('  ✖ Not Production Ready'),
+  );
+  lines.push('');
   lines.push(pc.dim(`─`.repeat(60)));
   lines.push('');
 
