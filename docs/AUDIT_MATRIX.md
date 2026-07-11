@@ -130,21 +130,40 @@ predating this spec — see Open Items below for reconciliation.)
 | ENG-009 | A README describing the project exists | info | automatic |
 | ENG-010 | Runtime/engine versions are pinned | info | automatic |
 
-## Phase 4 — Security
+## Phase 4 — Security — ✅ Shipped (v0.8 Security Audit Pack)
+
+Implemented in `src/audit/checks/security.ts`. Unlike Discovery/Architecture
+(pure doc-existence checks), most of these need code-level evidence
+(a dependency or a source pattern), which is inherently heuristic — see
+[AUDIT_SPEC.md](AUDIT_SPEC.md) validation rule 5 (v1.1): checks marked
+"automatic\*" below resolve an unmatched scan to `manual_review`, not
+`fail`, since absence-of-detected-evidence isn't proof of absence. Only
+SEC-003 and SEC-007 have a strong enough signal to `fail`.
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| SEC-001 | Authentication is implemented | critical | automatic |
-| SEC-002 | Authorization / access control is implemented | critical | automatic |
+| SEC-001 | Authentication is implemented | critical | automatic\* |
+| SEC-002 | Authorization / access control is implemented | critical | automatic\* |
 | SEC-003 | No secrets committed to source; secrets externalized | critical | automatic |
-| SEC-004 | Rate limiting is present on public endpoints | high | automatic |
-| SEC-005 | Input validation is present at trust boundaries | high | automatic |
-| SEC-006 | HTTPS/TLS is enforced | high | automatic |
+| SEC-004 | Rate limiting is present on public endpoints | high | automatic\* |
+| SEC-005 | Input validation is present at trust boundaries | high | automatic\* |
+| SEC-006 | HTTPS/TLS is enforced | high | automatic\* |
 | SEC-007 | Dependency vulnerability scanning is configured | medium | automatic |
-| SEC-008 | CSP / security headers are configured | medium | automatic |
+| SEC-008 | CSP / security headers are configured | medium | automatic\* |
 | SEC-009 | The authorization model matches actual data sensitivity | high | manual |
-| SEC-010 | Security-relevant events are audit-logged | info | automatic |
-| SEC-011 | Session cookies use Secure/HttpOnly/SameSite | info | automatic |
+| SEC-010 | Security-relevant events are audit-logged | info | automatic\* |
+| SEC-011 | Session cookies use Secure/HttpOnly/SameSite | info | automatic\* |
+| SEC-012 *(added v0.8)* | File uploads are size/type restricted | high | automatic\* |
+
+\* = resolves to `manual_review` (not `fail`) when its heuristic scan finds
+no evidence, per spec rule 5. SEC-011/SEC-012 additionally resolve to
+`skip` when the concern doesn't apply at all (no session/upload dependency
+detected).
+
+**SEC-012 was missing from the original matrix design** — caught during
+CTO review of the v0.8 checklist (which explicitly called out file upload
+security) before implementation started. Appended rather than renumbering
+SEC-001..011.
 
 ## Phase 5 — Quality
 
@@ -190,9 +209,12 @@ predating this spec — see Open Items below for reconciliation.)
 
 ## Totals
 
-- 7 phases, **62 checks** (up from 12 today).
-- Automatic: 52. Manual: 10.
-- Critical: 13. High: 26. Medium: 15. Info: 8.
+- 7 phases, **63 checks** (up from 12 pre-Milestone-2; +1 vs. the original
+  design after SEC-012 was added in v0.8).
+- Automatic: 53 (9 of which — all in Security — resolve unmatched
+  heuristic scans to `manual_review` rather than `fail`, marked `automatic\*`
+  in that section). Manual: 10.
+- Critical: 13. High: 27. Medium: 15. Info: 8.
 
 ## Open items before Milestone 2 implementation
 

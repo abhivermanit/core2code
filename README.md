@@ -99,8 +99,13 @@ Not every check can be answered automatically. Some ask a quality/soundness
 question (is the scope well-bounded, is the problem statement specific) that
 a tool can't reliably judge — those are `manual` checks and always show up
 under a **Needs Review** section instead of being silently scored pass/fail.
-See [docs/AUDIT_SPEC.md](docs/AUDIT_SPEC.md) for the automatic-vs-manual
-check format.
+Security checks add a related case: several can only prove a positive (a
+recognized auth/validation/rate-limiting library or code pattern found) —
+finding nothing isn't proof the practice is missing, just that this scan
+didn't recognize a hand-rolled implementation, so those also land in Needs
+Review rather than a false fail. See [docs/AUDIT_SPEC.md](docs/AUDIT_SPEC.md)
+for the automatic-vs-manual check format and the manual_review-on-inconclusive
+rule.
 
 ```
 Production Readiness
@@ -108,7 +113,7 @@ Production Readiness
   Discovery       86%
   Architecture    83%
   Engineering     91%
-  Security       N/A
+  Security        90%
   Quality        100%
   Delivery       N/A
   Operations     N/A
@@ -120,14 +125,17 @@ Needs Review
   ◐ Scope (in/out) is explicitly bounded
     Confirm the project explicitly states what is in scope and out of scope...
     → Add an explicit "Scope" / "Out of scope" section to the PRD or README.
+  ◐ Rate limiting is present on public endpoints
+    No recognized rate-limiting dependency or code pattern found.
+    → Add rate limiting to public/unauthenticated endpoints to protect against abuse.
 ```
 
-As of v0.7.0, checks are implemented for the **Discovery**, **Architecture**,
-**Engineering**, and **Quality** phases (28 checks total: 7 Discovery, 9
-Architecture, 11 Engineering, 1 Quality). The other three phases are
-registered in the engine but intentionally empty; each ships as its own
-"Audit Pack" — see [ROADMAP.md](ROADMAP.md) for the release plan and
-[docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md) for the full 62-check design.
+As of v0.8.0, checks are implemented for the **Discovery**, **Architecture**,
+**Engineering**, **Security**, and **Quality** phases (40 checks total: 7
+Discovery, 9 Architecture, 11 Engineering, 12 Security, 1 Quality). The other
+two phases are registered in the engine but intentionally empty; each ships
+as its own "Audit Pack" — see [ROADMAP.md](ROADMAP.md) for the release plan
+and [docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md) for the full 63-check design.
 
 The audit exits non-zero if any `error`-severity check fails, so it can gate CI.
 

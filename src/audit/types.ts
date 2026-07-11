@@ -34,7 +34,15 @@ export interface CheckResult {
  * sub-categories below; phases without sub-categories (Discovery, and
  * others as they're implemented) use their own phase name.
  */
-export type AuditCategory = 'structure' | 'dependencies' | 'config' | 'git' | 'quality' | 'discovery' | 'architecture';
+export type AuditCategory =
+  | 'structure'
+  | 'dependencies'
+  | 'config'
+  | 'git'
+  | 'quality'
+  | 'discovery'
+  | 'architecture'
+  | 'security';
 
 /**
  * Lifecycle phase a check belongs to, per the Core2Code production
@@ -81,6 +89,15 @@ export interface AuditContext {
    * checks that shouldn't hard-require a specific file path.
    */
   docFiles: string[];
+  /**
+   * Relative POSIX paths of source code files anywhere in the project
+   * (bounded, exclude-list based). Used by Security checks to look for
+   * code-level evidence (a middleware call, a validation schema) beyond
+   * just a dependency in package.json.
+   */
+  sourceFiles: string[];
+  /** Raw content of .gitignore, or null if none exists. */
+  gitignoreContent: string | null;
 }
 
 /**

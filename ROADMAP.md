@@ -101,7 +101,18 @@ with manual checks) — no framework changes for their own sake from here on.
   ADRs living in a `docs/adr/` directory count as evidence even when no
   individual filename contains "adr". Discovery itself was frozen per CTO
   instruction — untouched, all its tests pass unmodified.
-- **v0.8 — Security Audit Pack** (11 checks: SEC-001..011)
+- **v0.8 — Security Audit Pack** — ✅ Done (12 checks: SEC-001..012 — added
+  SEC-012 file-upload security, missing from the original matrix design,
+  caught during CTO review before implementation). First pack needing
+  code-level evidence (dependency/source-pattern scanning, not doc
+  existence) — added `AuditContext.sourceFiles` and
+  `findCodeEvidence`/`hasDependency`/`findSourcePattern`/`scanForSecrets`
+  to `checks/helpers.ts`. Introduced [AUDIT_SPEC.md](docs/AUDIT_SPEC.md)
+  v1.1: heuristic automatic checks resolve an unmatched scan to
+  `manual_review`, not `fail`, since absence-of-detected-evidence isn't
+  proof of absence — only SEC-003 (secrets) and SEC-007 (scanning config
+  existence) have a strong enough signal to fail. Discovery and
+  Architecture stayed frozen — untouched, all tests pass unmodified.
 - **v0.9 — Quality Audit Pack** (8 checks: QUAL-001..008)
 - **v1.0 — Delivery Audit Pack + Operations Audit Pack + Production Readiness Certification**
   (8 + 9 = 17 checks: DEL-001..008, OPS-001..009, plus a formal

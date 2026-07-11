@@ -1,10 +1,14 @@
-# Core2Code Audit Specification (v1)
+# Core2Code Audit Specification (v1.1)
 
-**Status:** Frozen. This is the record format every check — implemented or
-not — must conform to. It's the API contract between the audit *matrix*
-(what exists, [AUDIT_MATRIX.md](AUDIT_MATRIX.md)) and the audit *engine*
-(how checks run, `src/audit/`). Changing a field here is a breaking change
-to that contract and requires a new spec version, not a silent edit.
+**Status:** Frozen except for additive changes recorded in the changelog
+below. This is the record format every check — implemented or not — must
+conform to. It's the API contract between the audit *matrix* (what exists,
+[AUDIT_MATRIX.md](AUDIT_MATRIX.md)) and the audit *engine* (how checks run,
+`src/audit/`). Changing a field here is a breaking change to that contract
+and requires a new spec version, not a silent edit. New *rules* (like the
+v1.1 addition below) can be added without bumping to v2 as long as they're
+additive — they narrow how an existing field is used, not change the field
+set itself.
 
 Once a check's record is written against this spec, adding it to the engine
 should be close to mechanical — the record already contains the pass/fail
@@ -62,23 +66,61 @@ reused even if a check is later retired.
    what a *human* reviewer should look for, not what the engine decides.
 4. Severity is set by production impact if the check fails, not by how
    hard the check is to implement.
+5. **(v1.1)** Some `type: automatic` checks can only prove a positive —
+   their only evidence source is a heuristic dependency/pattern scan (e.g.
+   "is a recognized rate-limiting library used"), not a binary check like
+   file existence. For these, absence of a match is *not* proof the
+   underlying practice is absent — it may just be an implementation this
+   check's pattern library doesn't recognize (a hand-rolled rate limiter,
+   TLS terminated at a hosting platform invisible to the repo, etc.).
+   **Such checks resolve an unmatched scan to `manual_review`, not
+   `fail`.** `fail` stays reserved for checks with a confidence-equivalent
+   signal to a binary existence check — a secret pattern *was* found in
+   source; a known scanning config file is *absent* — where "we looked and
+   the answer is genuinely no" is a safe claim. This does not apply to
+   `type: manual` checks (rule 3 already covers those) or to plain
+   existence checks (a specific file present or not) — only to automatic
+   checks built on inherently incomplete pattern-matching. When in doubt:
+   would writing `fail` here overclaim confidence the tool doesn't have?
+   If yes, use `manual_review`.
 
 ## Worked examples
 
-One per `type`, chosen to be representative:
+One per `type`, plus one demonstrating the v1.1 manual_review-fallback rule:
 
 ```yaml
+id: SEC-007
+title: Dependency vulnerability scanning is configured
+phase: security
+severity: medium
+type: automatic
+why: Unpatched dependencies are one of the most common production breach vectors.
+evidence: A known scanning tool is configured (Dependabot, Renovate, Snyk).
+pass: A recognized scanning config file (e.g. .github/dependabot.yml) or dependency (snyk, audit-ci) is found.
+fail: No recognized scanning configuration is found.
+manual_review: No
+remediation: Add Dependabot (.github/dependabot.yml) or Renovate to keep dependencies patched.
+references: OWASP ASVS 14.2
+```
+
+```yaml
+# Demonstrates rule 5 (v1.1): type is still automatic, and manual_review
+# is still No per rule 1 (this isn't a `manual`-type check) — but per rule
+# 5, a heuristic pattern-match check like this one resolves an unmatched
+# scan to a manual_review *status* at runtime, not a fail record. The
+# spec record's `fail` field documents that deliberately-unused condition
+# so the reasoning is visible, not silently absent.
 id: SEC-001
-title: Authentication exists
+title: Authentication is implemented
 phase: security
 severity: critical
 type: automatic
 why: Prevents unauthorized access to the system.
-evidence: An authentication mechanism (middleware, guard, or equivalent) is wired into the request path.
-pass: Every non-public route requires a valid authentication check before executing.
-fail: Private routes are reachable without any authentication check.
+evidence: A recognized authentication dependency (passport, next-auth, ...) or code pattern (jwt.verify, passport.authenticate, ...) is present.
+pass: A recognized authentication dependency or code pattern is found.
+fail: Not used at runtime (rule 5) — an unmatched scan can't distinguish "no auth" from "auth this tool doesn't recognize", so it resolves to manual_review instead.
 manual_review: No
-remediation: Implement authentication middleware and apply it to all non-public routes.
+remediation: Confirm authentication is implemented and protects private routes; if hand-rolled, consider documenting the approach.
 references: OWASP ASVS 2.1
 ```
 
@@ -125,3 +167,7 @@ roadmap) — flagged here, not settled.
 
 - **v1** — initial freeze. Fields: id, title, phase, severity, type, why,
   evidence, pass, fail, manual_review, remediation, references.
+- **v1.1** (v0.8 Security Audit Pack) — added validation rule 5: automatic
+  checks built on heuristic dependency/pattern scans (not binary existence
+  checks) resolve an unmatched scan to `manual_review`, not `fail`. No
+  field changes — additive rule only.

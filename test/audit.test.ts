@@ -10,6 +10,7 @@ import {
   buildAuditContext,
   ALL_CHECKS,
 } from '../src/audit';
+import { hasDependency, findSourcePattern, findCodeEvidence } from '../src/audit/checks/helpers';
 
 describe('audit', () => {
   let tmpDir: string;
@@ -64,6 +65,56 @@ describe('audit', () => {
       expect(ctx.docFiles).toContain('docs/PRD.md');
       expect(ctx.docFiles).toContain('docs/nested/risks.md');
       expect(ctx.docFiles.some((f) => f.includes('node_modules'))).toBe(false);
+    });
+
+    it('finds source files under non-standard top-level dirs and excludes node_modules', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'server'));
+      await fs.writeFile(path.join(tmpDir, 'server', 'index.ts'), 'export const x = 1;\n');
+      await fs.ensureDir(path.join(tmpDir, 'node_modules', 'somepkg'));
+      await fs.writeFile(path.join(tmpDir, 'node_modules', 'somepkg', 'index.js'), 'module.exports = {};\n');
+
+      const ctx = await buildAuditContext(tmpDir);
+      expect(ctx.sourceFiles).toContain('server/index.ts');
+      expect(ctx.sourceFiles.some((f) => f.includes('node_modules'))).toBe(false);
+    });
+  });
+
+  describe('code evidence helpers', () => {
+    it('hasDependency matches against dependencies and devDependencies', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), {
+        dependencies: { 'next-auth': '^4.0.0' },
+        devDependencies: { zod: '^3.0.0' },
+      });
+      const ctx = await buildAuditContext(tmpDir);
+      expect(hasDependency(ctx, [/^next-auth$/i])).toBe('next-auth');
+      expect(hasDependency(ctx, [/^zod$/i])).toBe('zod');
+      expect(hasDependency(ctx, [/^does-not-exist$/i])).toBeNull();
+    });
+
+    it('findSourcePattern scans source file content', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'src'));
+      await fs.writeFile(path.join(tmpDir, 'src', 'auth.ts'), 'export function requireAuth() {}\n');
+      const ctx = await buildAuditContext(tmpDir);
+      expect(await findSourcePattern(ctx, [/requireAuth/])).toBe('src/auth.ts');
+      expect(await findSourcePattern(ctx, [/doesNotExist/])).toBeNull();
+    });
+
+    it('findCodeEvidence prefers dependency evidence, falls back to source pattern, else found:false', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), { dependencies: { passport: '^0.6.0' } });
+      const ctx1 = await buildAuditContext(tmpDir);
+      const depEvidence = await findCodeEvidence(ctx1, [/^passport$/i], [/never-matches/]);
+      expect(depEvidence.found).toBe(true);
+
+      await fs.remove(path.join(tmpDir, 'package.json'));
+      await fs.writeJson(path.join(tmpDir, 'package.json'), {});
+      await fs.ensureDir(path.join(tmpDir, 'src'));
+      await fs.writeFile(path.join(tmpDir, 'src', 'auth.ts'), 'jwt.verify(token);\n');
+      const ctx2 = await buildAuditContext(tmpDir);
+      const srcEvidence = await findCodeEvidence(ctx2, [/^passport$/i], [/jwt\.verify/]);
+      expect(srcEvidence.found).toBe(true);
+
+      const noEvidence = await findCodeEvidence(ctx2, [/^passport$/i], [/never-matches/]);
+      expect(noEvidence.found).toBe(false);
     });
   });
 
@@ -222,7 +273,15 @@ describe('audit', () => {
         name: 'good-project',
         scripts: { test: 'vitest', build: 'tsc' },
         engines: { node: '>=18' },
+        dependencies: {
+          'next-auth': '^4.0.0',
+          'express-rate-limit': '^7.0.0',
+          zod: '^3.0.0',
+          helmet: '^7.0.0',
+        },
       });
+      await fs.ensureDir(path.join(dir, '.github'));
+      await fs.writeFile(path.join(dir, '.github', 'dependabot.yml'), 'version: 2\nupdates: []\n');
       await fs.ensureDir(path.join(dir, 'src'));
       await fs.ensureDir(path.join(dir, '.git'));
       await fs.writeFile(path.join(dir, '.gitignore'), 'node_modules\n');
@@ -264,10 +323,13 @@ describe('audit', () => {
       expect(report.passed).toBeGreaterThan(0);
       expect(report.phaseScores).toHaveLength(7);
       expect(report.readyForProduction).toBe(true);
-      // DISC-002/DISC-007 (Discovery) and ARCH-006/008/009 (Architecture)
-      // are manual, so they never count as failures or move the score,
-      // but should still surface as needing review.
-      expect(report.needsReview).toBe(5);
+      // DISC-002/DISC-007 (Discovery), ARCH-006/008/009 (Architecture),
+      // and SEC-002/009/010/011 (Security, whose heuristic scans don't
+      // recognize this minimal fixture's authz/audit-logging/cookie-flag
+      // evidence) are manual or manual_review, so they never count as
+      // failures or move the score, but should still surface as needing
+      // review.
+      expect(report.needsReview).toBe(9);
     });
 
     it('produces a failing report for an empty directory', async () => {
@@ -425,6 +487,131 @@ describe('audit', () => {
       const check = architectureChecks().find((c) => c.id === 'ARCH-007')!;
       const result = await check.run(ctx);
       expect(result.status).toBe('fail');
+    });
+  });
+
+  describe('Security checks', () => {
+    function securityChecks() {
+      return ALL_CHECKS.filter((c) => c.phase === 'security');
+    }
+
+    it('has 12 checks, ids SEC-001..012', () => {
+      const ids = securityChecks()
+        .map((c) => c.id)
+        .sort();
+      expect(ids).toEqual([
+        'SEC-001',
+        'SEC-002',
+        'SEC-003',
+        'SEC-004',
+        'SEC-005',
+        'SEC-006',
+        'SEC-007',
+        'SEC-008',
+        'SEC-009',
+        'SEC-010',
+        'SEC-011',
+        'SEC-012',
+      ]);
+    });
+
+    it('SEC-009 always returns manual_review, regardless of directory contents', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-009')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('manual_review');
+      expect(result.remediation).toBeTruthy();
+    });
+
+    it('SEC-001 passes when a recognized auth dependency is present', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), { dependencies: { 'next-auth': '^4.0.0' } });
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+
+    it('SEC-001 resolves to manual_review (not fail) when no auth evidence is found', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), { dependencies: {} });
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('manual_review');
+    });
+
+    it('SEC-001 skips when there is no package.json at all', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('skip');
+    });
+
+    it('SEC-003 fails when a high-confidence secret pattern is found in source', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'src'));
+      await fs.writeFile(path.join(tmpDir, 'src', 'config.ts'), 'const apiKey = "not-a-real-credential-1234567890";\n');
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-003')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+    });
+
+    it('SEC-003 fails when a .env file exists but is not gitignored', async () => {
+      await fs.writeFile(path.join(tmpDir, '.env'), 'SECRET=whatever\n');
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-003')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+    });
+
+    it('SEC-003 passes on clean source with .env properly gitignored', async () => {
+      await fs.writeFile(path.join(tmpDir, '.env'), 'SECRET=whatever\n');
+      await fs.writeFile(path.join(tmpDir, '.gitignore'), '.env\n');
+      await fs.ensureDir(path.join(tmpDir, 'src'));
+      await fs.writeFile(path.join(tmpDir, 'src', 'index.ts'), 'export const x = 1;\n');
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-003')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+
+    it('SEC-007 passes when a dependabot config exists', async () => {
+      await fs.ensureDir(path.join(tmpDir, '.github'));
+      await fs.writeFile(path.join(tmpDir, '.github', 'dependabot.yml'), 'version: 2\n');
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-007')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+
+    it('SEC-007 fails when no scanning config is found', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-007')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+    });
+
+    it('SEC-011 skips when no session/cookie dependency is present', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), { dependencies: {} });
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-011')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('skip');
+    });
+
+    it('SEC-012 skips when no file-upload dependency is present', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), { dependencies: {} });
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-012')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('skip');
+    });
+
+    it('SEC-012 resolves to manual_review when an upload dependency exists but no size/type limits are found', async () => {
+      await fs.writeJson(path.join(tmpDir, 'package.json'), { dependencies: { multer: '^1.4.5' } });
+      const ctx = await buildAuditContext(tmpDir);
+      const check = securityChecks().find((c) => c.id === 'SEC-012')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('manual_review');
     });
   });
 });
