@@ -34,7 +34,7 @@ export interface CheckResult {
  * sub-categories below; phases without sub-categories (Discovery, and
  * others as they're implemented) use their own phase name.
  */
-export type AuditCategory = 'structure' | 'dependencies' | 'config' | 'git' | 'quality' | 'discovery';
+export type AuditCategory = 'structure' | 'dependencies' | 'config' | 'git' | 'quality' | 'discovery' | 'architecture';
 
 /**
  * Lifecycle phase a check belongs to, per the Core2Code production

@@ -1,6 +1,6 @@
 {
   "name": "create-core2code",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Scaffold a new project using the Core2Code engineering framework.",
   "type": "commonjs",
   "bin": {

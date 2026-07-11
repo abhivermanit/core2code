@@ -90,9 +90,15 @@ prioritization.
 
 *Automatic = evidence of the artifact exists somewhere recognized. Manual = is the content actually good.*
 
-## Phase 2 — Architecture
+## Phase 2 — Architecture — ✅ Shipped (v0.7 Architecture Audit Pack)
 
-*Were structural decisions made deliberately, not improvised?*
+*Were structural decisions made deliberately, not improvised?* Implemented
+in `src/audit/checks/architecture.ts`. `findEvidenceDoc` (in
+`checks/helpers.ts`) was extended here to match against the full relative
+path, not just the filename, so ADRs in a `docs/adr/0001-*.md`-style
+directory count as evidence even when "adr" only appears in the directory
+name — Discovery's existing matches and tests were unaffected (basename is
+always a substring of the full path).
 
 | id | title | severity | type |
 | --- | --- | --- | --- |

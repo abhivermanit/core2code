@@ -49,10 +49,14 @@ export interface EvidenceMatch {
 }
 
 /**
- * Look for a doc in ctx.docFiles whose name matches one of `include` and
- * none of `exclude`. Returns the first match with whether it clears a
- * triviality bar (a few non-empty lines) — this is an existence guard
- * against literally-empty files, not a semantic quality check.
+ * Look for a doc in ctx.docFiles whose relative path matches one of
+ * `include` and none of `exclude`. Matching the full path (not just the
+ * filename) means a directory name counts as evidence too — e.g. an ADR
+ * living at docs/adr/0001-use-postgres.md matches /\badr\b/i via its
+ * parent directory even though "adr" isn't in that filename. Returns the
+ * first match with whether it clears a triviality bar (a few non-empty
+ * lines) — this is an existence guard against literally-empty files, not
+ * a semantic quality check.
  */
 export async function findEvidenceDoc(
   ctx: AuditContext,
@@ -60,8 +64,7 @@ export async function findEvidenceDoc(
   exclude: RegExp[] = [],
 ): Promise<EvidenceMatch | null> {
   const match = ctx.docFiles.find((f) => {
-    const base = path.basename(f);
-    return include.some((re) => re.test(base)) && !exclude.some((re) => re.test(base));
+    return include.some((re) => re.test(f)) && !exclude.some((re) => re.test(f));
   });
   if (!match) return null;
 

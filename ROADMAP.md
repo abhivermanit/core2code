@@ -95,7 +95,12 @@ with manual checks) — no framework changes for their own sake from here on.
   pack to exercise `manual_review` as a real engine status (DISC-002,
   DISC-007) and the new evidence-based doc scanning (`AuditContext.docFiles`,
   `findEvidenceDoc`) that later packs reuse.
-- **v0.7 — Architecture Audit Pack** (9 checks: ARCH-001..009)
+- **v0.7 — Architecture Audit Pack** — ✅ Done (9 checks: ARCH-001..009).
+  Reused Discovery's evidence-scanning infra unchanged; extended
+  `findEvidenceDoc` to match full relative paths (not just filenames) so
+  ADRs living in a `docs/adr/` directory count as evidence even when no
+  individual filename contains "adr". Discovery itself was frozen per CTO
+  instruction — untouched, all its tests pass unmodified.
 - **v0.8 — Security Audit Pack** (11 checks: SEC-001..011)
 - **v0.9 — Quality Audit Pack** (8 checks: QUAL-001..008)
 - **v1.0 — Delivery Audit Pack + Operations Audit Pack + Production Readiness Certification**

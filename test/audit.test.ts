@@ -67,6 +67,22 @@ describe('audit', () => {
     });
   });
 
+  describe('findEvidenceDoc path matching', () => {
+    it('matches evidence via a directory name, not just the filename (e.g. docs/adr/0001-x.md)', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'docs', 'adr'));
+      // Deliberately no "adr" in the filename itself — only the directory
+      // carries it, so this only passes if matching uses the full path.
+      await fs.writeFile(
+        path.join(tmpDir, 'docs', 'adr', '0001-use-postgres.md'),
+        '# 0001\n\nContext.\nDecision.\nAlternatives.\nConsequences.\nMore.\n',
+      );
+      const ctx = await buildAuditContext(tmpDir);
+      const check = ALL_CHECKS.find((c) => c.id === 'ARCH-005')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+  });
+
   describe('computeScore', () => {
     it('returns 100% for all passes', () => {
       const results = [
@@ -228,6 +244,14 @@ describe('audit', () => {
       );
       await fs.writeFile(path.join(dir, 'docs', 'risks.md'), substantiveDoc('Risks'));
       await fs.writeFile(path.join(dir, 'docs', 'assumptions.md'), substantiveDoc('Assumptions'));
+
+      await fs.writeFile(path.join(dir, 'docs', 'architecture.md'), substantiveDoc('Architecture'));
+      await fs.writeFile(path.join(dir, 'docs', 'data-model.md'), substantiveDoc('Data Model'));
+      await fs.writeFile(path.join(dir, 'docs', 'authentication.md'), substantiveDoc('Authentication'));
+      await fs.writeFile(path.join(dir, 'docs', 'api-design.md'), substantiveDoc('API Design'));
+      await fs.writeFile(path.join(dir, 'docs', 'threat-model.md'), substantiveDoc('Threat Model'));
+      await fs.ensureDir(path.join(dir, 'docs', 'adr'));
+      await fs.writeFile(path.join(dir, 'docs', 'adr', '0001-use-postgres.md'), substantiveDoc('0001'));
     }
 
     it('produces a passing report for a well-formed project', async () => {
@@ -240,9 +264,10 @@ describe('audit', () => {
       expect(report.passed).toBeGreaterThan(0);
       expect(report.phaseScores).toHaveLength(7);
       expect(report.readyForProduction).toBe(true);
-      // DISC-002 and DISC-007 are manual, so they never count as failures
-      // or move the score, but should still surface as needing review.
-      expect(report.needsReview).toBe(2);
+      // DISC-002/DISC-007 (Discovery) and ARCH-006/008/009 (Architecture)
+      // are manual, so they never count as failures or move the score,
+      // but should still surface as needing review.
+      expect(report.needsReview).toBe(5);
     });
 
     it('produces a failing report for an empty directory', async () => {
@@ -324,6 +349,80 @@ describe('audit', () => {
       );
       const ctx = await buildAuditContext(tmpDir);
       const check = discoveryChecks().find((c) => c.id === 'DISC-003')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+    });
+  });
+
+  describe('Architecture checks', () => {
+    function architectureChecks() {
+      return ALL_CHECKS.filter((c) => c.phase === 'architecture');
+    }
+
+    it('has 9 checks, ids ARCH-001..009', () => {
+      const ids = architectureChecks()
+        .map((c) => c.id)
+        .sort();
+      expect(ids).toEqual([
+        'ARCH-001',
+        'ARCH-002',
+        'ARCH-003',
+        'ARCH-004',
+        'ARCH-005',
+        'ARCH-006',
+        'ARCH-007',
+        'ARCH-008',
+        'ARCH-009',
+      ]);
+    });
+
+    it('ARCH-006, ARCH-008, and ARCH-009 always return manual_review, regardless of directory contents', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const manualChecks = architectureChecks().filter((c) =>
+        ['ARCH-006', 'ARCH-008', 'ARCH-009'].includes(c.id),
+      );
+      expect(manualChecks).toHaveLength(3);
+      for (const check of manualChecks) {
+        const result = await check.run(ctx);
+        expect(result.status).toBe('manual_review');
+        expect(result.remediation).toBeTruthy();
+      }
+    });
+
+    it('ARCH-001 fails when no architecture description exists', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const check = architectureChecks().find((c) => c.id === 'ARCH-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('fail');
+    });
+
+    it('ARCH-001 passes when a substantive architecture doc exists under docs/', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'docs'));
+      await fs.writeFile(
+        path.join(tmpDir, 'docs', 'architecture.md'),
+        '# Architecture\n\nLine one.\nLine two.\nLine three.\nLine four.\nLine five.\n',
+      );
+      const ctx = await buildAuditContext(tmpDir);
+      const check = architectureChecks().find((c) => c.id === 'ARCH-001')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+
+    it('ARCH-005 passes when ADRs live in a docs/adr/ directory with non-"adr"-named files', async () => {
+      await fs.ensureDir(path.join(tmpDir, 'docs', 'adr'));
+      await fs.writeFile(
+        path.join(tmpDir, 'docs', 'adr', '0001-use-postgres.md'),
+        '# 0001\n\nContext.\nDecision.\nAlternatives.\nConsequences.\nMore.\n',
+      );
+      const ctx = await buildAuditContext(tmpDir);
+      const check = architectureChecks().find((c) => c.id === 'ARCH-005')!;
+      const result = await check.run(ctx);
+      expect(result.status).toBe('pass');
+    });
+
+    it('ARCH-007 fails when no threat model exists', async () => {
+      const ctx = await buildAuditContext(tmpDir);
+      const check = architectureChecks().find((c) => c.id === 'ARCH-007')!;
       const result = await check.run(ctx);
       expect(result.status).toBe('fail');
     });

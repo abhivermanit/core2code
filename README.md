@@ -106,14 +106,14 @@ check format.
 Production Readiness
 
   Discovery       86%
-  Architecture   N/A
+  Architecture    83%
   Engineering     91%
   Security       N/A
   Quality        100%
   Delivery       N/A
   Operations     N/A
 
-Overall: 92%
+Overall: 90%
 ✔ Production Ready
 
 Needs Review
@@ -122,11 +122,11 @@ Needs Review
     → Add an explicit "Scope" / "Out of scope" section to the PRD or README.
 ```
 
-As of v0.6.0, checks are implemented for the **Discovery**, **Engineering**,
-and **Quality** phases (19 checks total: 7 Discovery, 11 Engineering, 1
-Quality). The other four phases are registered in the engine but
-intentionally empty; each ships as its own "Audit Pack" — see
-[ROADMAP.md](ROADMAP.md) for the release plan and
+As of v0.7.0, checks are implemented for the **Discovery**, **Architecture**,
+**Engineering**, and **Quality** phases (28 checks total: 7 Discovery, 9
+Architecture, 11 Engineering, 1 Quality). The other three phases are
+registered in the engine but intentionally empty; each ships as its own
+"Audit Pack" — see [ROADMAP.md](ROADMAP.md) for the release plan and
 [docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md) for the full 62-check design.
 
 The audit exits non-zero if any `error`-severity check fails, so it can gate CI.
