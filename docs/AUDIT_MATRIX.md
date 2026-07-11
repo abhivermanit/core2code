@@ -1,7 +1,10 @@
 # Audit Matrix — Design Document
 
-**Status:** Approved design, pre-implementation. No code in this repo implements
-this yet — see [ROADMAP.md](../ROADMAP.md) Milestone 2.
+**Status:** Approved design, pre-implementation. No code in this repo
+implements this yet — see [ROADMAP.md](../ROADMAP.md) Milestone 2 for the
+phased delivery order. Every check below must conform to
+[AUDIT_SPEC.md](AUDIT_SPEC.md), which is the frozen record format; this doc
+is the inventory of *which* checks exist, not the format contract.
 
 This is Core2Code's core IP: the definition of what "production ready" means,
 phase by phase. It's expected to change slowly, unlike the engine that
@@ -37,66 +40,14 @@ Pretending an Automatic check can assess quality (e.g. "PRD.md exists" ==
 "the product is well-scoped") is the failure mode this avoids. A check is
 scoped to what its type can actually prove.
 
-### 3. Check record schema
+### 3. Record format
 
-Every check — implemented or not yet — should be describable by:
-
-| Field | Meaning |
-| --- | --- |
-| `id` | Stable identifier, `<phase>/<slug>` |
-| `title` | Human-readable name |
-| `phase` | One of the 7 lifecycle phases |
-| `severity` | `critical` \| `high` \| `medium` \| `info` |
-| `type` | `automatic` \| `manual` |
-| `whyItMatters` | One sentence: what breaks in production if this is missing |
-| `evidence` | What satisfies the check — described as forms of evidence, not a single file path |
-| `remediation` | What to do if it fails / is flagged |
-
-Two fully-specified examples, to show the shape:
-
-```yaml
-id: security/secrets-management
-title: No secrets committed to source
-phase: security
-severity: critical
-type: automatic
-whyItMatters: >
-  A committed API key or DB credential is compromised the moment it's
-  pushed, and rotating it after the fact doesn't undo exposure.
-evidence: >
-  No high-confidence secret patterns (API keys, private keys, connection
-  strings with embedded credentials) found in tracked files; secrets are
-  referenced via env vars / a secrets manager, and .env-style files are
-  gitignored.
-remediation: >
-  Move the secret to an env var or secrets manager, rotate the exposed
-  credential, and add the file pattern to .gitignore.
-```
-
-```yaml
-id: architecture/decision-quality
-title: Architectural decisions are reasoned and documented
-phase: architecture
-severity: high
-type: manual
-whyItMatters: >
-  Undocumented or unreasoned architecture decisions get silently
-  relitigated or contradicted as the codebase grows, and AI coding
-  assistants have no record of *why* a pattern was chosen.
-evidence: >
-  A reviewer can point to specific decision records (ADRs, design docs,
-  linked tickets, or equivalent) that state the decision, the
-  alternatives considered, and the tradeoff reasoning — not just "we use
-  Postgres" with no rationale.
-remediation: >
-  Write or backfill ADRs for the significant decisions already made;
-  require an ADR for the next one.
-```
-
-Filling out `whyItMatters` / `evidence` / `remediation` for every check below
-is Milestone-2-prep writing work — tracked, not yet done. The table below is
-the id/title/severity/type inventory; full records get written as each
-phase is implemented.
+Every check's full record (why/evidence/pass/fail/remediation/references)
+must conform to [AUDIT_SPEC.md](AUDIT_SPEC.md). This doc only carries the
+inventory columns (id/title/severity/type) per phase; full records get
+authored when a phase is actually implemented, in the order set by the
+roadmap's vertical delivery plan (Discovery → Architecture → Security →
+Quality → Delivery+Operations).
 
 ### 4. Outcome model
 
@@ -128,13 +79,13 @@ prioritization.
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| discovery/problem-defined | A problem statement / PRD exists | critical | automatic |
-| discovery/scope-defined | Scope (in/out) is explicitly bounded | high | manual |
-| discovery/functional-requirements | Functional requirements are documented | high | automatic |
-| discovery/nonfunctional-requirements | Non-functional requirements (perf, scale, availability targets) documented | high | automatic |
-| discovery/risks-documented | Known risks are documented | medium | automatic |
-| discovery/assumptions-documented | Assumptions are documented and marked validated/unvalidated | medium | automatic |
-| discovery/problem-quality | The problem statement is specific and falsifiable, not generic | medium | manual |
+| DISC-001 | A problem statement / PRD exists | critical | automatic |
+| DISC-002 | Scope (in/out) is explicitly bounded | high | manual |
+| DISC-003 | Functional requirements are documented | high | automatic |
+| DISC-004 | Non-functional requirements (perf, scale, availability targets) documented | high | automatic |
+| DISC-005 | Known risks are documented | medium | automatic |
+| DISC-006 | Assumptions are documented and marked validated/unvalidated | medium | automatic |
+| DISC-007 | The problem statement is specific and falsifiable, not generic | medium | manual |
 
 *Automatic = evidence of the artifact exists somewhere recognized. Manual = is the content actually good.*
 
@@ -144,106 +95,109 @@ prioritization.
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| architecture/design-exists | An architecture description (components, data flow) exists | critical | automatic |
-| architecture/data-model-exists | A data model / schema description exists | critical | automatic |
-| architecture/auth-design-exists | AuthN/AuthZ design is documented | high | automatic |
-| architecture/api-contracts-exist | API contracts are documented (OpenAPI, GraphQL schema, or equivalent) | high | automatic |
-| architecture/decision-records-exist | Decisions are recorded (ADRs or equivalent), not just implied by code | high | automatic |
-| architecture/decision-quality | Decision records show real reasoning and alternatives considered | high | manual |
-| architecture/threat-model-exists | A threat model exists | medium | automatic |
-| architecture/threat-model-quality | The threat model covers the system's actual attack surface | high | manual |
-| architecture/design-quality | The architecture is sound for the stated non-functional requirements | high | manual |
+| ARCH-001 | An architecture description (components, data flow) exists | critical | automatic |
+| ARCH-002 | A data model / schema description exists | critical | automatic |
+| ARCH-003 | AuthN/AuthZ design is documented | high | automatic |
+| ARCH-004 | API contracts are documented (OpenAPI, GraphQL schema, or equivalent) | high | automatic |
+| ARCH-005 | Decisions are recorded (ADRs or equivalent), not just implied by code | high | automatic |
+| ARCH-006 | Decision records show real reasoning and alternatives considered | high | manual |
+| ARCH-007 | A threat model exists | medium | automatic |
+| ARCH-008 | The threat model covers the system's actual attack surface | high | manual |
+| ARCH-009 | The architecture is sound for the stated non-functional requirements | high | manual |
 
 ## Phase 3 — Engineering
 
-*Day-to-day code health.* (12 checks already implemented in Milestone 1 —
-listed here for matrix completeness; ids below don't yet match the shipped
-ids one-to-one and will be reconciled when Milestone 2 touches this phase.)
+*Day-to-day code health.* (12 checks already implemented in Milestone 1,
+predating this spec — see Open Items below for reconciliation.)
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| engineering/manifest-exists | Project manifest (package.json or equivalent) exists | critical | automatic |
-| engineering/source-structure | Source code lives in a recognizable structure | high | automatic |
-| engineering/coding-standards | Coding standards / lint configuration present | high | automatic |
-| engineering/error-handling-pattern | A consistent error-handling pattern is evident | high | manual |
-| engineering/config-management | Configuration is externalized (env vars / config files), not hardcoded | high | automatic |
-| engineering/logging-standard | A structured logging approach is present | medium | automatic |
-| engineering/dependency-policy | Dependency update/review policy exists | medium | automatic |
-| engineering/type-safety | Static type checking is enabled and enforced | medium | automatic |
-| engineering/readme-exists | A README describing the project exists | info | automatic |
-| engineering/engines-pinned | Runtime/engine versions are pinned | info | automatic |
+| ENG-001 | Project manifest (package.json or equivalent) exists | critical | automatic |
+| ENG-002 | Source code lives in a recognizable structure | high | automatic |
+| ENG-003 | Coding standards / lint configuration present | high | automatic |
+| ENG-004 | A consistent error-handling pattern is evident | high | manual |
+| ENG-005 | Configuration is externalized (env vars / config files), not hardcoded | high | automatic |
+| ENG-006 | A structured logging approach is present | medium | automatic |
+| ENG-007 | Dependency update/review policy exists | medium | automatic |
+| ENG-008 | Static type checking is enabled and enforced | medium | automatic |
+| ENG-009 | A README describing the project exists | info | automatic |
+| ENG-010 | Runtime/engine versions are pinned | info | automatic |
 
 ## Phase 4 — Security
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| security/authentication | Authentication is implemented | critical | automatic |
-| security/authorization | Authorization / access control is implemented | critical | automatic |
-| security/secrets-management | No secrets committed to source; secrets externalized | critical | automatic |
-| security/rate-limiting | Rate limiting is present on public endpoints | high | automatic |
-| security/input-validation | Input validation is present at trust boundaries | high | automatic |
-| security/transport-security | HTTPS/TLS is enforced | high | automatic |
-| security/dependency-scanning | Dependency vulnerability scanning is configured | medium | automatic |
-| security/security-headers | CSP / security headers are configured | medium | automatic |
-| security/authz-model-quality | The authorization model matches actual data sensitivity | high | manual |
-| security/audit-logging | Security-relevant events are audit-logged | info | automatic |
-| security/cookie-flags | Session cookies use Secure/HttpOnly/SameSite | info | automatic |
+| SEC-001 | Authentication is implemented | critical | automatic |
+| SEC-002 | Authorization / access control is implemented | critical | automatic |
+| SEC-003 | No secrets committed to source; secrets externalized | critical | automatic |
+| SEC-004 | Rate limiting is present on public endpoints | high | automatic |
+| SEC-005 | Input validation is present at trust boundaries | high | automatic |
+| SEC-006 | HTTPS/TLS is enforced | high | automatic |
+| SEC-007 | Dependency vulnerability scanning is configured | medium | automatic |
+| SEC-008 | CSP / security headers are configured | medium | automatic |
+| SEC-009 | The authorization model matches actual data sensitivity | high | manual |
+| SEC-010 | Security-relevant events are audit-logged | info | automatic |
+| SEC-011 | Session cookies use Secure/HttpOnly/SameSite | info | automatic |
 
 ## Phase 5 — Quality
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| quality/unit-tests | Unit tests exist and run | critical | automatic |
-| quality/ci-runs-tests | Tests run automatically in CI | critical | automatic |
-| quality/integration-tests | Integration tests exist | high | automatic |
-| quality/api-tests | API/contract tests exist | high | automatic |
-| quality/coverage-adequacy | Test coverage reflects the system's critical paths, not just easy ones | high | manual |
-| quality/security-tests | Security tests (SAST / dependency scan) run in CI | medium | automatic |
-| quality/performance-tests | Performance/load tests exist | medium | automatic |
-| quality/accessibility-tests | Accessibility tests exist (where UI applies) | info | automatic |
+| QUAL-001 | Unit tests exist and run | critical | automatic |
+| QUAL-002 | Tests run automatically in CI | critical | automatic |
+| QUAL-003 | Integration tests exist | high | automatic |
+| QUAL-004 | API/contract tests exist | high | automatic |
+| QUAL-005 | Test coverage reflects the system's critical paths, not just easy ones | high | manual |
+| QUAL-006 | Security tests (SAST / dependency scan) run in CI | medium | automatic |
+| QUAL-007 | Performance/load tests exist | medium | automatic |
+| QUAL-008 | Accessibility tests exist (where UI applies) | info | automatic |
 
 ## Phase 6 — Delivery
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| delivery/ci-cd-pipeline | A CI/CD pipeline is configured | critical | automatic |
-| delivery/environment-separation | Dev/staging/prod environments are separated in config | critical | automatic |
-| delivery/rollback-strategy | A rollback mechanism exists | high | automatic |
-| delivery/migrations-versioned | Database migrations are versioned and reproducible | high | automatic |
-| delivery/tls-at-deploy | TLS is configured at the deployment target | medium | automatic |
-| delivery/release-strategy | A versioning/release strategy is evident (semver, CHANGELOG) | medium | automatic |
-| delivery/pipeline-quality | The pipeline actually gates bad releases (not just runs and ignores failures) | high | manual |
-| delivery/feature-flags | Feature flags are available for risky changes | info | automatic |
+| DEL-001 | A CI/CD pipeline is configured | critical | automatic |
+| DEL-002 | Dev/staging/prod environments are separated in config | critical | automatic |
+| DEL-003 | A rollback mechanism exists | high | automatic |
+| DEL-004 | Database migrations are versioned and reproducible | high | automatic |
+| DEL-005 | TLS is configured at the deployment target | medium | automatic |
+| DEL-006 | A versioning/release strategy is evident (semver, CHANGELOG) | medium | automatic |
+| DEL-007 | The pipeline actually gates bad releases (not just runs and ignores failures) | high | manual |
+| DEL-008 | Feature flags are available for risky changes | info | automatic |
 
 ## Phase 7 — Operations
 
 | id | title | severity | type |
 | --- | --- | --- | --- |
-| operations/monitoring | Monitoring/observability is configured | critical | automatic |
-| operations/backups | Backups are configured | critical | automatic |
-| operations/alerting | Alerting is configured for critical failures | high | automatic |
-| operations/disaster-recovery-plan | A disaster recovery plan exists | high | automatic |
-| operations/dr-plan-quality | The DR plan's RTO/RPO match the business's actual tolerance | high | manual |
-| operations/runbooks | Runbooks exist for known operational tasks | medium | automatic |
-| operations/incident-process | An incident/postmortem process exists | medium | automatic |
-| operations/cost-monitoring | Cost monitoring is configured | info | automatic |
-| operations/capacity-planning | A capacity planning approach is documented | info | automatic |
+| OPS-001 | Monitoring/observability is configured | critical | automatic |
+| OPS-002 | Backups are configured | critical | automatic |
+| OPS-003 | Alerting is configured for critical failures | high | automatic |
+| OPS-004 | A disaster recovery plan exists | high | automatic |
+| OPS-005 | The DR plan's RTO/RPO match the business's actual tolerance | high | manual |
+| OPS-006 | Runbooks exist for known operational tasks | medium | automatic |
+| OPS-007 | An incident/postmortem process exists | medium | automatic |
+| OPS-008 | Cost monitoring is configured | info | automatic |
+| OPS-009 | A capacity planning approach is documented | info | automatic |
 
 ---
 
 ## Totals
 
-- 7 phases, 50 checks (up from 12 today).
-- Automatic: 39. Manual: 11.
-- Critical: 12. High: 20. Medium: 11. Info: 7.
+- 7 phases, **62 checks** (up from 12 today).
+- Automatic: 52. Manual: 10.
+- Critical: 13. High: 26. Medium: 15. Info: 8.
 
 ## Open items before Milestone 2 implementation
 
-1. Reconcile Engineering's matrix ids with the ids already shipped in
-   `src/audit/checks/engineering.ts` (Milestone 1) — either rename shipped
-   ids to match or update this doc, don't diverge silently.
-2. Write full `whyItMatters` / `evidence` / `remediation` records for each
-   check (currently only 2 are fully specified as examples above).
+1. Reconcile Engineering's `ENG-*` matrix ids with the ids already shipped
+   in `src/audit/checks/engineering.ts` (Milestone 1, e.g.
+   `structure/package-json`) — either rename shipped ids to match or update
+   this doc, don't diverge silently. Lowest priority since Engineering
+   already shipped; revisit if/when Engineering gets touched again.
+2. Write full [AUDIT_SPEC.md](AUDIT_SPEC.md)-conformant records
+   (why/evidence/pass/fail/remediation/references) for each check —
+   authored per-phase, in the order the phase is actually implemented, not
+   all 62 upfront.
 3. Decide how `manual_review` surfaces in `CheckStatus` / `AuditReport` —
-   this is an engine change, deferred to when Milestone 2 actually starts
-   writing code.
+   an engine change, deferred to when a phase with manual checks
+   (Discovery is first) actually gets implemented.

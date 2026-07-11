@@ -48,7 +48,7 @@ The audit engine evaluates seven phases, Discovery through Operations. See
 
 ### Pre-Milestone-2 — Design the audit matrix — ✅ Done
 
-Full matrix defined in [docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md): 50
+Full matrix defined in [docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md): 62
 checks across 7 phases, each with a severity tier and an Automatic/Manual
 type. Two governing decisions from CTO review:
 
@@ -61,23 +61,50 @@ type. Two governing decisions from CTO review:
   this threat model actually complete") and always resolve to
   `manual_review` — never faked as an automated pass/fail.
 
-Remaining prep work (tracked in the doc's Open Items, not blocking
-Milestone 2 kickoff): write full why-it-matters/evidence/remediation
-records per check, and design how `manual_review` fits into
-`CheckStatus`/`AuditReport` when that engine change actually happens.
+### Pre-Milestone-2 — Freeze the audit specification — ✅ Done
 
-### Milestone 2 — Engineering lifecycle audits (Discovery → Operations)
+[docs/AUDIT_SPEC.md](docs/AUDIT_SPEC.md) freezes the per-check record format
+(id/title/phase/severity/type/why/evidence/pass/fail/manual_review/
+remediation/references) — the API contract every check, current or future,
+must conform to. Checks become data written against this spec, not
+one-off code. IDs follow `<PHASE-CODE>-<NNN>` (e.g. `SEC-001`); matrix ids
+were renumbered to match.
 
-Implement the checks defined by the audit matrix, phase by phase.
+Remaining prep work (tracked in the matrix doc's Open Items, not blocking
+Milestone 2 kickoff): write full spec-conformant records per check —
+authored per-phase as each phase is implemented, not all 62 upfront — and
+design how `manual_review` fits into `CheckStatus`/`AuditReport` when
+Discovery (the first phase with manual checks) is implemented.
 
-### Milestone 3 — Security and architecture analysis, production readiness scoring
+### Milestone 2 — Implement the audit matrix, shipped vertically by phase
 
-Deeper Security/Architecture checks; revisit scoring (e.g. severity-weighted
-points, not just flat pass/fail) now that real data exists across phases.
+Per CTO decision: don't implement all 62 checks in one release. Ship one
+phase per minor version so users get value every release instead of waiting
+for one large one. Each release: write that phase's spec-conformant check
+records, implement them in `src/audit/checks/`, extend the engine only as
+that phase's checks require (e.g. `manual_review` status support lands with
+Discovery, since it's the first phase with manual checks).
+
+- **v0.6 — Discovery** (7 checks: DISC-001..007)
+- **v0.7 — Architecture** (9 checks: ARCH-001..009)
+- **v0.8 — Security** (11 checks: SEC-001..011)
+- **v0.9 — Quality** (8 checks: QUAL-001..008)
+- **v1.0 — Delivery + Operations + Production Readiness Certification**
+  (8 + 9 = 17 checks: DEL-001..008, OPS-001..009, plus a formal
+  "certified production ready" report/badge once all 7 phases are scored)
+
+Engineering (already shipped, 10 checks in the matrix vs. 12 shipped) gets
+reconciled opportunistically, not as its own release — see matrix Open Item 1.
+
+### Milestone 3 — Deepen scoring
+
+Revisit severity-weighted scoring (critical/high/medium/info, not just
+error/warn/info) now that real data exists across all 7 phases.
 
 ### Milestone 4 — AI-assisted remediation guidance
 
-Automated fix recommendations per failed check.
+Automated fix recommendations per failed check, using each record's
+`remediation` field as the starting point.
 
 ### Milestone 5 — CI/CD integration, GitHub Action, VS Code extension, SaaS dashboard
 
