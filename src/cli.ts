@@ -7,6 +7,7 @@ import { generateProject } from './generator';
 import { runPrompts } from './prompts';
 import { ConsoleLogger } from './logger';
 import { CliError } from './errors';
+import { runAuditCli } from './audit/cli';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const pkg = require('../package.json');
@@ -31,6 +32,12 @@ function collectStacks(opts: CliOptions): string[] {
  * Main entry point for the CLI.
  */
 export async function main(argv?: string[]): Promise<void> {
+  // Subcommand: audit
+  if ((argv || process.argv)[2] === 'audit') {
+    await runAuditCli(argv || process.argv);
+    return;
+  }
+
   const logger = new ConsoleLogger();
 
   const program = new Command()
