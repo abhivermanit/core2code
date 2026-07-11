@@ -46,13 +46,25 @@ The audit engine evaluates seven phases, Discovery through Operations. See
 - Engine frozen after this milestone — no new checks land until the audit
   matrix (below) is designed.
 
-### Pre-Milestone-2 — Design the audit matrix — 🔄 In progress
+### Pre-Milestone-2 — Design the audit matrix — ✅ Done
 
-For each of the 7 phases, define: what's being audited, how many checks, and
-each check's severity tier (Critical / High / Medium / Informational). This
-matrix is the product's core IP and is expected to stay stable for years —
-worth getting right before writing check code. Tracked as a design doc, not
-code.
+Full matrix defined in [docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md): 50
+checks across 7 phases, each with a severity tier and an Automatic/Manual
+type. Two governing decisions from CTO review:
+
+- **Evidence, not filenames.** Checks describe what evidence satisfies them
+  (e.g. "a decision record exists"), not a specific Core2Code template path
+  — so the audit works on repos that never used Core2Code to scaffold.
+- **Automatic vs. Manual is a hard split.** Automatic checks answer a binary,
+  mechanically-verifiable question and resolve to pass/fail. Manual checks
+  ask a quality/soundness question a tool can't reliably infer (e.g. "is
+  this threat model actually complete") and always resolve to
+  `manual_review` — never faked as an automated pass/fail.
+
+Remaining prep work (tracked in the doc's Open Items, not blocking
+Milestone 2 kickoff): write full why-it-matters/evidence/remediation
+records per check, and design how `manual_review` fits into
+`CheckStatus`/`AuditReport` when that engine change actually happens.
 
 ### Milestone 2 — Engineering lifecycle audits (Discovery → Operations)
 
