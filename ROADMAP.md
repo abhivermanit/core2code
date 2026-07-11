@@ -1,5 +1,24 @@
 # Core2Code Roadmap
 
+## Status: 🧊 Temporarily frozen (as of v0.8.0)
+
+Milestone 1 (engine) and the first three Audit Packs (Discovery,
+Architecture, Security) are done, on top of the already-shipped Engineering
+checks — see [Milestone 2](#milestone-2--audit-packs) below. Per CTO
+decision, no new engine/check changes land until a validation pass
+completes:
+
+**v0.8.1 — Validation Release (in progress, not yet code).** Run
+`create-core2code audit` against real and representative projects across
+multiple stacks (Next.js, Express, FastAPI, Spring Boot, Laravel) and
+record what it catches, what it misses, and where the heuristics (evidence
+patterns, dependency lists) need tuning — especially for non-Node
+ecosystems, which the current Security/Engineering checks are biased
+toward (`hasDependency` only reads `package.json`). Findings from this
+pass inform Quality (v0.9) rather than guessing blind. Bug fixes found
+during validation are fair game; new checks/features are not until this
+completes.
+
 ## Vision
 
 Core2Code is a **production engineering audit and governance platform** that

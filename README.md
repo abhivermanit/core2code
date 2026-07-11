@@ -1,7 +1,34 @@
 # create-core2code
 
-> Scaffold a new project using the **Core2Code** engineering framework — an
-> engineering operating system for building production-grade applications.
+[![npm version](https://img.shields.io/npm/v/create-core2code.svg)](https://www.npmjs.com/package/create-core2code)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+> **Core2Code is a production engineering audit and governance platform.**
+> It scaffolds new projects, and it audits any project — AI-generated or
+> not — against a production-readiness matrix covering the full software
+> engineering lifecycle: Discovery, Architecture, Engineering, Security,
+> Quality, Delivery, and Operations. Its defining question:
+> **"Can this application safely go to production?"**
+
+## Current capabilities (v0.8.0)
+
+| | |
+| --- | --- |
+| **Audit checks implemented** | 40, across 5 of 7 lifecycle phases (Discovery, Architecture, Engineering, Security, Quality-partial) |
+| **Full audit matrix designed** | 63 checks across all 7 phases — see [docs/AUDIT_MATRIX.md](docs/AUDIT_MATRIX.md) |
+| **Outcome model** | `pass` / `fail` / `skip` / `manual_review` — heuristic checks flag `manual_review` instead of a false fail when evidence is inconclusive |
+| **Evidence detection** | Framework-agnostic: doc scanning + dependency/source-pattern scanning, not hardcoded to Core2Code's own templates |
+| **Scaffolding stacks** | React, Next.js, Express, Fastify, PostgreSQL, MongoDB, Docker, GitHub Actions |
+| **Releases** | [v0.5.0 – v0.8.0](https://github.com/abhivermanit/core2code/releases) — see [ROADMAP.md](ROADMAP.md) for what's next |
+
+Security, Delivery, and Operations checks that need code-level judgment
+(e.g. "does this authorization model match the data's sensitivity") are
+marked `manual` and never faked as an automated pass/fail — see
+[docs/AUDIT_SPEC.md](docs/AUDIT_SPEC.md).
+
+> **Status:** development is temporarily paused after v0.8.0 for a
+> validation pass across real/representative projects in multiple stacks
+> before continuing — see [ROADMAP.md](ROADMAP.md#status--temporarily-frozen-as-of-v080).
 
 ## Quick Start
 
